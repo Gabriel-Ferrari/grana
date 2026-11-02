@@ -69,6 +69,25 @@ test('corrente + poupança na mesma conta: baixa automática não lança; o rest
   assert.ok(toRow(tx({ id: 'q3', type: 'CREDIT', amount: 1349.69, description: 'PIX RECEBIDO - REM  JULIA' }), ctx));
 });
 
+test('cartão: pendente recente entra (ext pending), antigo não; pagamento antecipado/boleto é ignorado', () => {
+  const ctx = { ...ctxCard, pendingSince: '2026-10-01' };
+  assert.equal(toRow(tx({ id: 'pe1', status: 'PENDING', date: '2026-10-25T15:00:00.000Z', description: 'STEAMGAMES.COM' }), ctx)!.ext_id, 'pluggy:pending:pe1');
+  assert.equal(toRow(tx({ id: 'pe2', status: 'PENDING', date: '2026-07-24T15:00:00.000Z' }), ctx), null);
+  assert.equal(toRow(tx({ id: 'pe3', status: 'PENDING' }), ctxAcc), null); // na conta, pendente continua fora
+  assert.equal(toRow(tx({ type: 'CREDIT', description: 'PAGTO ANTECIPADO PIX' }), ctx), null);
+  assert.equal(toRow(tx({ type: 'CREDIT', description: 'PAGAMENTO-BOLETO BANCARIO' }), ctx), null);
+  assert.ok(toRow(tx({ type: 'CREDIT', description: 'CREDITO NA FATURA COOPERA', amount: 17.16 }), ctx)!.amount > 0);
+});
+
+test('pendente confirmado pelo banco com id novo: junta, não duplica', () => {
+  const existing = [{ id: 'g1', amount: -20930, date: '2026-10-25', ext_id: 'pluggy:pending:pe1' }];
+  const { merges, inserts } = reconcile([{ ext_id: 'pluggy:po9', amount: -20930, date: '2026-10-27' }], existing);
+  assert.deepEqual(merges, [{ id: 'g1', ext_id: 'pluggy:po9' }]);
+  assert.equal(inserts.length, 0);
+  // o mesmo pendente chegando de novo: já conhecido
+  assert.equal(reconcile([{ ext_id: 'pluggy:pending:pe1', amount: -20930, date: '2026-10-25' }], existing).inserts.length, 0);
+});
+
 test('categoria da Pluggy -> categoria do grana', () => {
   const cats = [{ id: 'c1', name: 'Mercado', kind: 'expense' }, { id: 'c2', name: 'Salário', kind: 'income' }];
   assert.equal(mapCategory('Groceries', 'expense', cats), 'c1');

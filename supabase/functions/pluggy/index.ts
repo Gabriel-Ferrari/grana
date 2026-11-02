@@ -64,7 +64,8 @@ async function syncUser(user_id: string, key: string) {
         // pagamento de fatura na conta -> liga ao cartão do mesmo banco (um item = um banco no MeuPluggy)
         const invoices = cardOfItem.length === 1
           ? (await db.from('invoices').select('invoice_date').eq('card_id', cardOfItem[0].card_id)).data ?? [] : [];
-        const rows = txs.map((t) => toRow(t, { user_id, account_id: m.account_id, card_id: m.card_id, paysCard: cardOfItem[0]?.card_id ?? null, invoices, skipInternal: shared.has(m.account_id) }))
+        const rows = txs.map((t) => toRow(t, { user_id, account_id: m.account_id, card_id: m.card_id, paysCard: cardOfItem[0]?.card_id ?? null, invoices, skipInternal: shared.has(m.account_id),
+          pendingSince: brDate(new Date(Date.now() - 45 * 864e5).toISOString()) }))
           .filter((r): r is NonNullable<typeof r> => !!r);
         if (!rows.length) continue;
 
@@ -87,7 +88,7 @@ async function syncUser(user_id: string, key: string) {
         // o banco confirmou: o que estava "a pagar" vira pago
         if (confirmed.length) await db.from('transactions').update({ paid: true }).in('id', confirmed).eq('paid', false);
         for (const mg of merges) {
-          await db.from('transactions').update({ ext_id: mg.ext_id }).eq('id', mg.id).is('ext_id', null);
+          await db.from('transactions').update({ ext_id: mg.ext_id }).eq('id', mg.id).or('ext_id.is.null,ext_id.like.pluggy:pending:*');
         }
         out.merged += merges.length;
         if (inserts.length) {

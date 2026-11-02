@@ -22,21 +22,26 @@ function uuidOf(s: string) {
   return `${x.slice(0, 8)}-${x.slice(8, 12)}-4${x.slice(13, 16)}-a${x.slice(17, 20)}-${x.slice(20, 32)}`;
 }
 const FATURA = /pagamento.*fatura|pagto.*cart|pag.*cart[aã]o|fatura.*cart|pgto fatura|pagamento recebido|pagamento efetuado/i;
+/** no cartão, crédito com cara de pagamento (Bradesco: "PAGTO ANTECIPADO PIX", Sicoob: "PAGAMENTO-BOLETO BANCARIO") */
+const CARD_PAY = /pagto antecipado|pag(amento|to)?[\s-]*boleto|^pagamento|^pagto/i;
 const brDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
 export function toRow(t: PluggyTx, ctx: {
   user_id: string; account_id: string | null; card_id: string | null; paysCard: string | null; invoices: { invoice_date: string }[];
   /** corrente e poupança ligadas na mesma conta do grana: a baixa automática entre elas se anula, não lança */
   skipInternal?: boolean;
+  /** compras PENDENTES do cartão a partir desta data (YYYY-MM-DD) entram: são a fatura aberta. Mais antigas são lixo do banco. */
+  pendingSince?: string;
 }): Row | null {
-  if (t.status === 'PENDING') return null;
+  const pending = t.status === 'PENDING';
+  if (pending && !(ctx.card_id && ctx.pendingSince && brDate(t.date) >= ctx.pendingSince)) return null;
   const cents = Math.round(Math.abs(t.amount) * 100);
   if (!cents) return null;
   const amount = t.type === 'CREDIT' ? cents : -cents;
   const desc = (t.merchant?.businessName || t.merchant?.name || t.description || t.descriptionRaw || 'Lançamento').trim().slice(0, 120);
   const date = brDate(t.date);
   // no cartão, "pagamento recebido" é a quitação da fatura: o lado da conta já registra
-  if (ctx.card_id && t.type === 'CREDIT' && FATURA.test(t.description)) return null;
+  if (ctx.card_id && t.type === 'CREDIT' && (FATURA.test(t.description) || CARD_PAY.test(t.description))) return null;
   // na conta, pagamento de fatura vira pagamento do cartão (não conta como gasto em dobro)
   let pays: string | null = null, invoice_date: string | null = null;
   if (ctx.account_id && t.type === 'DEBIT' && ctx.paysCard && FATURA.test(t.description)) {
@@ -48,7 +53,7 @@ export function toRow(t: PluggyTx, ctx: {
   if (internal && ctx.skipInternal) return null;
   const inst = t.creditCardMetadata?.totalInstallments && t.creditCardMetadata.totalInstallments > 1 ? t.creditCardMetadata : null;
   return {
-    user_id: ctx.user_id, ext_id: `pluggy:${t.id}`, source: 'openfinance', description: desc, amount, date, paid: true, reviewed: false,
+    user_id: ctx.user_id, ext_id: pending ? `pluggy:pending:${t.id}` : `pluggy:${t.id}`, source: 'openfinance', description: desc, amount, date, paid: true, reviewed: false,
     account_id: ctx.account_id, card_id: ctx.card_id, pays_card_id: pays, invoice_date,
     category_id: null, installment: inst?.installmentNumber ?? null, installments: inst?.totalInstallments ?? null,
     _pluggyCategory: t.category ?? null,
@@ -56,6 +61,7 @@ export function toRow(t: PluggyTx, ctx: {
   };
 }
 
+const r0 = (rows: { ext_id: string }[], ext: string) => rows.some((r) => r.ext_id === ext);
 /** Junta com lançamentos já existentes: mesmo valor, até 2 dias de diferença.
  *  - sem ext_id (notificação/manual): recebe o ext_id da Pluggy (merge)
  *  - importado do Organizze (ext_id 'org:…'): é o mesmo lançamento; não insere de novo e mantém o ext_id do import */
@@ -63,7 +69,8 @@ export function reconcile<R extends { amount: number; date: string; ext_id: stri
   rows: R[], existing: { id: string; amount: number; date: string; ext_id: string | null }[],
 ) {
   const known = new Set(existing.map((e) => e.ext_id).filter(Boolean));
-  const free = existing.filter((e) => !e.ext_id || e.ext_id.startsWith('org:'));
+  // pendente já lançado também está "livre": quando o banco confirma (id novo), junta em vez de duplicar
+  const free = existing.filter((e) => !e.ext_id || e.ext_id.startsWith('org:') || (e.ext_id.startsWith('pluggy:pending:') && !r0(rows, e.ext_id)));
   const merges: { id: string; ext_id: string }[] = [];
   const inserts: R[] = [];
   /** lançamentos importados que o banco confirmou (marcar como pagos) */
@@ -73,7 +80,7 @@ export function reconcile<R extends { amount: number; date: string; ext_id: stri
     if (known.has(r.ext_id)) continue; // já sincronizado antes
     const i = free.findIndex((e) => e.amount === r.amount && Math.abs(Date.parse(e.date) - Date.parse(r.date)) <= 2 * 864e5);
     if (i < 0) { inserts.push(r); continue; }
-    if (free[i].ext_id) { skipped++; confirmed.push(free[i].id); } else merges.push({ id: free[i].id, ext_id: r.ext_id });
+    if (free[i].ext_id?.startsWith('org:')) { skipped++; confirmed.push(free[i].id); } else merges.push({ id: free[i].id, ext_id: r.ext_id });
     free.splice(i, 1);
   }
   return { merges, inserts, skipped, confirmed };
