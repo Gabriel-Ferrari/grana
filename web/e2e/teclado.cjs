@@ -52,9 +52,30 @@ const ok = (n, c, x = '') => console.log(`${c ? '✅' : '❌'} ${n}${x ? ' — '
         await p.getByRole('button', { name: 'Dois zeros' }).tap();
         await p.waitForTimeout(250);
         ok('tecla 00 (50 + 00 = R$ 50,00)', (await val()) === 'R$ 50,00', await val());
-        await p.getByRole('button', { name: 'Apagar' }).tap();
+        await p.getByRole('button', { name: /^Apagar/ }).tap();
         await p.waitForTimeout(250);
         ok('apagar', (await val()) === 'R$ 5,00', await val());
+        // segurar ⌫: apaga até soltar
+        await zerar();
+        for (const d of '12345678') await p.touchscreen.tap(...pos[d]);
+        await p.waitForTimeout(250);
+        const cdp = await ctx.newCDPSession(p);
+        const bk = await p.getByRole('button', { name: /^Apagar/ }).boundingBox();
+        const hold = async (ms) => {
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: bk.x + bk.width / 2, y: bk.y + bk.height / 2 }] });
+            await p.waitForTimeout(ms);
+            await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+            await p.waitForTimeout(250);
+        };
+        await hold(80);
+        ok('toque curto no ⌫ apaga 1', (await val()) === 'R$ 123.456,7'.replace(',7', ',67').replace('123.456,67', '12.345,67'), await val());
+        await hold(1300);
+        ok('segurar ⌫ apaga até zerar', (await val()) === 'R$ 0,00', await val());
+        for (const d of '987654') await p.touchscreen.tap(...pos[d]);
+        await p.waitForTimeout(250);
+        await hold(560);
+        const left = (await val()).replace(/\D/g, '').replace(/^0+/, '');
+        ok('soltar para de apagar', left.length >= 1 && left.length <= 4 && '987654'.startsWith(left), `${await val()}`);
         const done = await p.locator('.keypad-done .k-done').boundingBox();
         ok('✓ centralizado embaixo', Math.abs(done.x + done.width / 2 - 195) < 4, `centro x=${Math.round(done.x + done.width / 2)}`);
         await p.screenshot({ path: `${OUT}/teclado.png` });

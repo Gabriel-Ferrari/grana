@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, computed, inject, input, model, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, ElementRef, HostListener, computed, inject, input, model, output, signal, viewChild } from '@angular/core';
 import { addMonths, haptic, today } from '../../core';
 import { Icon } from './icon';
 import { BankLogo } from '../banks';
@@ -63,7 +63,20 @@ export class Money {
             @for (d of [1, 2, 3]; track d) {
                 <button type="button" (click)="num(d)">{{ d }}</button>
             }
-            <button type="button" class="k-back" (click)="num(-1)" aria-label="Apagar"><g-icon name="backspace" [size]="24" /></button>
+            <button
+                type="button"
+                class="k-back"
+                aria-label="Apagar (segure para apagar mais)"
+                (pointerdown)="backStart($event)"
+                (pointerup)="backStop()"
+                (pointerleave)="backStop()"
+                (pointercancel)="backStop()"
+                (contextmenu)="$event.preventDefault()"
+                (keydown.enter)="num(-1)"
+                (keydown.space)="$event.preventDefault(); num(-1)"
+            >
+                <g-icon name="backspace" [size]="24" />
+            </button>
             @for (d of [4, 5, 6]; track d) {
                 <button type="button" (click)="num(d)">{{ d }}</button>
             }
@@ -98,6 +111,25 @@ export class Keypad {
     finish() {
         haptic();
         this.done.emit();
+    }
+    /** ⌫ segurado: apaga um na hora e, depois de 0,4 s, um a cada 70 ms até soltar (como o teclado do celular) */
+    private hold?: ReturnType<typeof setTimeout>;
+    private repeat?: ReturnType<typeof setInterval>;
+    backStart(e: PointerEvent) {
+        e.preventDefault(); // sem foco/seleção; não há (click) aqui, então não apaga duas vezes
+        this.backStop();
+        this.num(-1);
+        let n = 0;
+        this.hold = setTimeout(() => {
+            this.repeat = setInterval(() => (++n > 20 ? this.backStop() : this.num(-1)), 70);
+        }, 400);
+    }
+    backStop() {
+        clearTimeout(this.hold);
+        clearInterval(this.repeat);
+    }
+    constructor() {
+        inject(DestroyRef).onDestroy(() => this.backStop());
     }
 }
 
