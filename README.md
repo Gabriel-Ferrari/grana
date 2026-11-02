@@ -60,7 +60,7 @@ Produção atual: Supabase `mfsblnrygzwdefvnezas`, Google Cloud `grana-513513`, 
 ### 1. Supabase
 1. Crie um projeto em supabase.com (região São Paulo).
 2. `npx supabase login && npx supabase link --project-ref SEU_REF`
-3. `npx supabase db push` e `npx supabase functions deploy ingest --no-verify-jwt`
+3. `npx supabase db push --remote` e `npx supabase functions deploy ingest --no-verify-jwt`
 
 ### 2. Login com Google
 1. console.cloud.google.com → APIs e serviços → Tela de consentimento OAuth: Externo; adicione seu Gmail como usuário de teste
