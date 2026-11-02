@@ -3221,3 +3221,13 @@ body:has(.sel-bar) .toast {
     font-weight: 650;
     color: var(--ink-2);
 }
+
+/* celular: rodapé do formulário e teclado com respiro acima da barra de gestos (no TWA o safe-area vale 0) */
+@media (max-width: 860px) {
+    .drawer footer {
+        padding: 0.9rem 1.25rem calc(2.25rem + env(safe-area-inset-bottom));
+    }
+    .keypad-sheet {
+        padding-bottom: calc(1.4rem + env(safe-area-inset-bottom));
+    }
+}
