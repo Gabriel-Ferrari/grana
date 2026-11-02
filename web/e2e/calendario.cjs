@@ -10,7 +10,7 @@ async function run(b, mode) {
   await p.goto(process.env.TARGET_URL); await p.getByLabel('E-mail').fill(process.env.TEST_EMAIL); await p.getByLabel('Senha', { exact: true }).fill(process.env.TEST_PASSWORD);
   await p.getByRole('button', { name: 'Entrar', exact: true }).click(); await p.waitForTimeout(2500);
   await p.locator('.tab-add').click(); await p.waitForTimeout(800);
-  await p.locator('.keypad .k-done').click(); await p.waitForTimeout(300);
+  await p.locator('.keypad-done .k-done').click(); await p.waitForTimeout(300);
   await p.getByRole('button', { name: /Outra data/ }).click(); await p.waitForTimeout(500);
   if (mode === 'nativo') {
     ok('celular: abre o calendário do sistema', (await p.evaluate(() => window.__picker)) === 1 && !(await p.locator('.cal').count()));

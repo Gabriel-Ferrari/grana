@@ -1,5 +1,5 @@
 import { Component, ElementRef, HostListener, computed, inject, input, model, output, signal, viewChild } from '@angular/core';
-import { addMonths, today } from '../../core';
+import { addMonths, haptic, today } from '../../core';
 import { Icon } from './icon';
 import { BankLogo } from '../banks';
 
@@ -53,28 +53,32 @@ export class Money {
     }
 }
 
-/** Teclado numérico grande (como no Organizze) para digitar o valor no celular. */
+/** Teclado numérico grande (como no Organizze) para digitar o valor no celular:
+ *  4×4 com coluna de operações, ✓ grande centralizado embaixo e vibração leve a cada toque. */
 @Component({
     selector: 'g-keypad',
     imports: [Icon],
     template: `
         <div class="keypad" role="group" aria-label="Teclado numérico com calculadora">
             @for (d of [1, 2, 3]; track d) {
-                <button type="button" (click)="key.emit(d)">{{ d }}</button>
+                <button type="button" (click)="num(d)">{{ d }}</button>
             }
-            <button type="button" class="k-op" (click)="op.emit('+')" aria-label="Somar">+</button>
+            <button type="button" class="k-back" (click)="num(-1)" aria-label="Apagar"><g-icon name="backspace" [size]="24" /></button>
             @for (d of [4, 5, 6]; track d) {
-                <button type="button" (click)="key.emit(d)">{{ d }}</button>
+                <button type="button" (click)="num(d)">{{ d }}</button>
             }
-            <button type="button" class="k-op" (click)="op.emit('-')" aria-label="Subtrair">−</button>
+            <button type="button" class="k-op" (click)="calc('+')" aria-label="Somar">+</button>
             @for (d of [7, 8, 9]; track d) {
-                <button type="button" (click)="key.emit(d)">{{ d }}</button>
+                <button type="button" (click)="num(d)">{{ d }}</button>
             }
-            <button type="button" class="k-op" (click)="op.emit('=')" aria-label="Igual">=</button>
-            <button type="button" class="k-done" (click)="done.emit()" aria-label="Pronto"><g-icon name="check" [size]="26" /></button>
-            <button type="button" (click)="key.emit(0)">0</button>
-            <button type="button" class="k-back" (click)="key.emit(-1)" aria-label="Apagar"><g-icon name="backspace" [size]="24" /></button>
-            <button type="button" class="k-op" (click)="op.emit('C')" aria-label="Zerar">C</button>
+            <button type="button" class="k-op" (click)="calc('-')" aria-label="Subtrair">−</button>
+            <button type="button" class="k-op" (click)="calc('C')" aria-label="Zerar">C</button>
+            <button type="button" (click)="num(0)">0</button>
+            <button type="button" (click)="num(0); num(0)" aria-label="Dois zeros">00</button>
+            <button type="button" class="k-op" (click)="calc('=')" aria-label="Igual">=</button>
+        </div>
+        <div class="keypad-done">
+            <button type="button" class="k-done" (click)="finish()" aria-label="Pronto"><g-icon name="check" [size]="30" /></button>
         </div>
     `,
 })
@@ -83,6 +87,18 @@ export class Keypad {
     /** calculadora: soma/subtrai valores (ex.: itens da conta, desconto); C zera */
     op = output<'+' | '-' | '=' | 'C'>();
     done = output<void>();
+    num(d: number) {
+        haptic();
+        this.key.emit(d);
+    }
+    calc(o: '+' | '-' | '=' | 'C') {
+        haptic();
+        this.op.emit(o);
+    }
+    finish() {
+        haptic();
+        this.done.emit();
+    }
 }
 
 const WEEK = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];

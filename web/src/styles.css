@@ -3714,3 +3714,101 @@ body:has(.sel-bar) .toast {
 .cards-total > div:last-child:not(:first-child) {
     text-align: right;
 }
+
+/* teclado: toque rápido sem atraso nem zoom de toque duplo; ✓ grande centralizado embaixo (como no Organizze) */
+.keypad button,
+.keypad-done button {
+    touch-action: manipulation;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+.keypad .k-back {
+    border-color: transparent;
+    background: none;
+}
+.keypad-done {
+    display: flex;
+    justify-content: center;
+    padding: 0.2rem 0 0.4rem;
+}
+.keypad-done .k-done {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    border: 0;
+    display: grid;
+    place-items: center;
+    background: var(--brand);
+    color: var(--paper);
+    box-shadow: 0 10px 24px -10px color-mix(in oklch, var(--brand) 70%, transparent);
+    cursor: pointer;
+    transition: transform 0.1s;
+}
+.keypad-done .k-done:active {
+    transform: scale(0.92);
+}
+
+/* ───── formulário no celular, como no Organizze: ✓ flutuando no centro, sem rodapé, gaveta mais alta ───── */
+@media (max-width: 860px) {
+    .drawer.tx {
+        height: 96dvh;
+        max-height: 96dvh;
+    }
+    .drawer.tx .tx-body {
+        padding-bottom: 7rem !important; /* o conteúdo rola por baixo do ✓ */
+    }
+    .drawer.tx footer {
+        height: 0;
+        padding: 0;
+        border: 0;
+    }
+    /* Salvar: botão redondo grande flutuando no centro, embaixo */
+    .drawer.tx footer .row:last-child {
+        position: absolute;
+        z-index: 5;
+        left: 50%;
+        bottom: calc(1.25rem + env(safe-area-inset-bottom));
+        translate: -50% 0;
+    }
+    .drawer.tx footer .btn.save {
+        width: 66px;
+        height: 66px;
+        padding: 0;
+        border-radius: 50%;
+        font-size: 0;
+        justify-content: center;
+        background: var(--brand);
+        color: var(--paper);
+        box-shadow: 0 14px 30px -10px color-mix(in oklch, var(--brand) 70%, transparent);
+    }
+    .drawer.tx footer .btn.save .ms {
+        font-size: 32px !important;
+    }
+    /* "+ Outro": pílula pequena ao lado do ✓, sem tirar o ✓ do centro */
+    .drawer.tx footer .row:last-child .btn.ghost {
+        position: absolute;
+        right: calc(100% + 0.7rem);
+        top: 50%;
+        translate: 0 -50%;
+        white-space: nowrap;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        box-shadow: var(--shadow);
+    }
+    /* editar: excluir / duplicar sobem para o topo, ao lado do X */
+    .drawer.tx footer .row:first-child {
+        position: absolute;
+        z-index: 5;
+        top: 0.75rem;
+        right: 3.6rem;
+        gap: 0.1rem;
+    }
+    .drawer.tx footer .row:first-child .btn {
+        color: white;
+    }
+    .drawer.tx[data-kind='transfer'] footer .row:first-child .btn {
+        color: var(--paper);
+    }
+}
