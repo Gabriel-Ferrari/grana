@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BANKS, Bank, BankLogo, NETWORKS, bankByPackage, bankOf, bankPackage, networkLogo } from '../banks';
-import { Store, authError, bankColor, catIcon, must, notify, sb, toCents } from '../core';
+import { Store, authError, bankColor, catIcon, must, notify, sb, toCents, today } from '../core';
 import { CATEGORY_ICONS, Icon } from '../icon';
 import { OpenFinance } from '../openfinance';
 
@@ -69,6 +69,27 @@ type Row = Record<string, any>;
     </section>
 
     <section class="panel reveal">
+      <div class="panel-head"><h2>Tags</h2><span class="muted small">{{ tags().length }}</span></div>
+      <div class="list">
+        @for (t of tags(); track t.tag) {
+          <div class="item">
+            <span class="cat-ico"><span class="ms">sell</span></span>
+            @if (tagEdit() === t.tag) {
+              <form class="row grow" (ngSubmit)="renameTag(t.tag, tagNew)" style="gap:.4rem">
+                <input name="tg" [(ngModel)]="tagNew" style="flex:1" aria-label="Novo nome da tag" />
+                <button class="btn primary">Salvar</button><button type="button" class="btn ghost" (click)="tagEdit.set('')">Cancelar</button>
+              </form>
+            } @else {
+              <div class="grow"><div class="title">{{ t.tag }}</div><div class="sub">{{ t.n }} {{ t.n > 1 ? 'lançamentos' : 'lançamento' }}</div></div>
+              <button class="btn ghost icon" (click)="tagNew = t.tag; tagEdit.set(t.tag)" aria-label="Renomear tag" title="Renomear"><g-icon name="edit" [size]="18" /></button>
+              <button class="btn ghost icon danger" (click)="renameTag(t.tag, '')" aria-label="Apagar tag" title="Tirar de todos os lançamentos"><g-icon name="delete" [size]="18" /></button>
+            }
+          </div>
+        } @empty { <div class="empty-state"><g-icon name="sell" /><div><b>Nenhuma tag ainda</b>Use tags no lançamento (Mais opções) para agrupar gastos de uma viagem, obra ou projeto.</div></div> }
+      </div>
+    </section>
+
+    <section class="panel reveal">
       <div class="panel-head"><h2>Segurança</h2><g-icon name="lock" class="muted" /></div>
       <p class="muted" style="margin:0 0 1rem">Entre também com <b>{{ store.session()?.user?.email }}</b> e uma senha, além do Google.</p>
       <form class="row wrap end" (ngSubmit)="setPassword()">
@@ -107,6 +128,12 @@ type Row = Record<string, any>;
                   <option value="wallet">Carteira</option><option value="other">Outra</option></select></label>
                 <label>Saldo inicial (R$) <input name="b" type="number" step="0.01" [(ngModel)]="e.row['_initial']" /></label>
               </div>
+              @if (e.row['id']) {
+                <label>Saldo de hoje (R$) — ajuste rápido
+                  <input name="hj" type="number" step="0.01" [(ngModel)]="e.row['_today']" />
+                  <span class="muted small">Se mudar, lança um "Ajuste de saldo" com a diferença (como no Organizze).</span></label>
+              }
+              <label class="check"><input name="hd" type="checkbox" [(ngModel)]="e.row['hide_from_total']" /> Não somar no saldo geral (continua no fluxo de caixa dela)</label>
             }
             @case ('cards') {
               <label>Bandeira</label>
@@ -139,6 +166,9 @@ type Row = Record<string, any>;
                   @for (c of catsOf(e.row['kind']); track c['id']) { @if (!c['parent_id'] && c['id'] !== e.row['id']) { <option [ngValue]="c['id']">{{ c['name'] }}</option> } }
                 </select></label>
               </div>
+              @if (e.row['kind'] === 'expense' && !e.row['parent_id']) {
+                <label class="check"><input name="es" type="checkbox" [(ngModel)]="e.row['essential']" /> Gasto essencial (moradia, mercado, saúde…) — usado no equilíbrio 50/30</label>
+              }
               <label>Ícone</label>
               <div class="icon-grid" role="radiogroup" aria-label="Ícone">
                 @for (i of icons; track i) {
@@ -183,6 +213,9 @@ export class Settings {
     const q = this.bankQuery().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     return BANKS.filter((b) => !q || b.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
   });
+  tags = signal<{ tag: string; n: number }[]>([]);
+  tagEdit = signal('');
+  tagNew = '';
   pass1 = '';
   pass2 = '';
   icon = (c: Row) => catIcon(c as never);
@@ -197,12 +230,14 @@ export class Settings {
   }
 
   async fetch() {
-    const [a, c, k] = await Promise.all([
+    const [a, c, k, t] = await Promise.all([
       must(sb.from('accounts').select('*').order('name')),
       must(sb.from('cards').select('*').order('name')),
       must(sb.from('categories').select('*').order('name')),
+      must(sb.rpc('report_by_tag', { p_from: '2000-01-01', p_to: '2100-12-31' })),
     ]);
     this.rows.set({ accounts: a, cards: c, categories: k });
+    this.tags.set((t as { tag: string; n: number }[]).sort((x, y) => x.tag.localeCompare(y.tag)));
   }
 
   create(kind: Kind) {
@@ -216,7 +251,8 @@ export class Settings {
   open(kind: Kind, r: Row) {
     this.bankQuery.set('');
     const color = kind === 'categories' ? r['color'] : bankColor(r['name'], r['color'], r['institution']) ?? '#1f6f4a';
-    this.edit.set({ kind, row: { ...r, color, _initial: (r['initial_balance'] ?? 0) / 100, _limit: (r['limit_cents'] ?? 0) / 100 } });
+    const today = kind === 'accounts' ? (this.store.accounts().find((a) => a.id === r['id'])?.balance ?? 0) / 100 : null;
+    this.edit.set({ kind, row: { ...r, color, _initial: (r['initial_balance'] ?? 0) / 100, _limit: (r['limit_cents'] ?? 0) / 100, _today: today, _todayWas: today } });
   }
 
   isBank(row: Row, b: Bank) {
@@ -234,11 +270,16 @@ export class Settings {
   }
 
   async save(kind: Kind, r: Row) {
-    const { _initial, _limit, created_at, user_id, ...row } = r;
+    const { _initial, _limit, _today, _todayWas, created_at, user_id, ...row } = r;
     if (kind === 'accounts') row['initial_balance'] = toCents(_initial ?? 0);
     if (kind === 'cards') row['limit_cents'] = toCents(_limit ?? 0);
     for (const k of ['notify_package', 'last4']) if (row[k] === '') row[k] = null;
     await must(row['id'] ? sb.from(kind).update(row).eq('id', row['id']) : sb.from(kind).insert(row));
+    // ajuste rápido: lança a diferença para o saldo bater com o banco
+    if (kind === 'accounts' && row['id'] && _today != null && _today !== _todayWas) {
+      const diff = toCents(_today) - toCents(_todayWas ?? 0);
+      if (diff) await must(sb.from('transactions').insert({ account_id: row['id'], description: 'Ajuste de saldo', amount: diff, date: today(), paid: true }));
+    }
     this.edit.set(null);
     await this.store.load();
     notify('Salvo');
@@ -249,6 +290,14 @@ export class Settings {
     this.edit.set(null);
     await this.store.load();
     notify('Excluído');
+  }
+
+  /** renomeia (ou apaga, com nome vazio) a tag em todos os lançamentos */
+  async renameTag(from: string, to: string) {
+    const n = await must(sb.rpc('rename_tag', { p_old: from, p_new: to }));
+    this.tagEdit.set('');
+    await this.store.load();
+    notify(to.trim() ? `"${from}" virou "${to.trim()}" em ${n} lançamentos` : `Tag "${from}" tirada de ${n} lançamentos`);
   }
 
   async setPassword() {

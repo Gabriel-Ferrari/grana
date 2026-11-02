@@ -11,10 +11,22 @@ type Inv = Invoice & { due: number; running_due: number };
   imports: [BrlPipe, FormsModule, Icon, ChipSelect],
   template: `
     <div class="tx-toolbar reveal">
-      <div class="month-pill" role="group" aria-label="Mês">
-        <button class="btn ghost icon" (click)="go(-1)" aria-label="Mês anterior"><g-icon name="chevron_left" /></button>
-        <b>{{ label() }}</b>
-        <button class="btn ghost icon" (click)="go(1)" aria-label="Próximo mês"><g-icon name="chevron_right" /></button>
+      <div class="row" style="gap:.4rem;flex-wrap:wrap">
+        <div class="month-pill" role="group" aria-label="Período">
+          @if (range().custom) {
+            <b style="padding-left:.6rem">{{ label() }}</b>
+            <button class="btn ghost icon" (click)="setPeriod('mes')" aria-label="Voltar para o mês" title="Voltar para o mês"><g-icon name="close" /></button>
+          } @else {
+            <button class="btn ghost icon" (click)="go(-1)" aria-label="Mês anterior"><g-icon name="chevron_left" /></button>
+            <b>{{ label() }}</b>
+            <button class="btn ghost icon" (click)="go(1)" aria-label="Próximo mês"><g-icon name="chevron_right" /></button>
+          }
+        </div>
+        <g-chip-select label="Período" [options]="periodOptions" [value]="period()" [clearable]="false" (valueChange)="setPeriod($event)" />
+        @if (period() === 'custom') {
+          <input type="date" style="width:auto" [ngModel]="range().from" (ngModelChange)="setRange($event, range().to)" aria-label="De" />
+          <input type="date" style="width:auto" [ngModel]="range().to" (ngModelChange)="setRange(range().from, $event)" aria-label="Até" />
+        }
       </div>
       <div class="row" style="gap:.4rem">
         @if (searching() || q()) {
@@ -35,7 +47,7 @@ type Inv = Invoice & { due: number; running_due: number };
       <g-chip-select label="Tipo" [options]="kindOptions" [value]="kind()" (valueChange)="kind.set($any($event))" />
       <g-chip-select label="Categoria" [options]="catOptions()" [value]="catSel()" (valueChange)="setParam('cat', $event)" />
       <g-chip-select label="Situação" [options]="paidOptions" [value]="paidSel()" (valueChange)="paidSel.set($any($event))" />
-      @if (origin() || kind() || catSel() || paidSel() || q()) {
+      @if (origin() || kind() || catSel() || paidSel() || q() || range().custom) {
         <button class="fchip clear" (click)="clearAll()"><span class="ms">close</span>Limpar</button>
       }
     </div>
@@ -69,6 +81,7 @@ type Inv = Invoice & { due: number; running_due: number };
                   @if (t.recurring) { <span class="tag"><g-icon name="repeat" [size]="13" />fixo</span> }
                   @if (t.source === 'notification') { <span class="tag auto"><g-icon name="notifications" [size]="13" />auto</span> }
                   @if (t.source === 'openfinance') { <span class="tag auto"><g-icon name="account_balance" [size]="13" />banco</span> }
+                  @if (t.attachments.length) { <span class="tag" title="Tem anexo"><g-icon name="attach_file" [size]="13" /></span> }
                   @for (tag of t.tags; track tag) { <span class="tag"><g-icon name="sell" [size]="13" />{{ tag }}</span> }
                 </div>
                 <div class="sub">
@@ -116,7 +129,42 @@ export class Transactions {
   m = input<string>();
   cat = input<string>();
   o = input<string>();
+  /** ?de=YYYY-MM-DD&ate=YYYY-MM-DD: período livre (Organizze: hoje, 7/15/30 dias, ano, personalizado); ?q=: busca */
+  de = input<string>();
+  ate = input<string>();
+  qParam = input<string>('', { alias: 'q' });
   month = computed(() => (this.m() ? this.m() + '-01' : monthStart(today())));
+  range = computed(() => {
+    const de = this.de(), ate = this.ate();
+    if (de && ate) return { from: de < ate ? de : ate, to: de < ate ? ate : de, custom: true };
+    return { from: this.month(), to: monthEnd(this.month()), custom: false };
+  });
+  periodOptions: ChipOption[] = [
+    { value: 'mes', label: 'Mês', icon: 'calendar_month' }, { value: 'hoje', label: 'Hoje', icon: 'event' },
+    { value: '7d', label: 'Últimos 7 dias', icon: 'date_range' }, { value: '15d', label: 'Últimos 15 dias', icon: 'date_range' },
+    { value: '30d', label: 'Últimos 30 dias', icon: 'date_range' }, { value: 'ano', label: 'Este ano', icon: 'date_range' },
+    { value: 'custom', label: 'Personalizado', icon: 'tune' },
+  ];
+  private customMode = signal(false);
+  period = computed(() => {
+    if (!this.range().custom) return this.customMode() ? 'custom' : 'mes';
+    const { from, to } = this.range(), t = today(), back = (n: number) => new Date(Date.now() - n * 864e5).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    if (to === t && from === t) return 'hoje';
+    for (const n of [7, 15, 30]) if (to === t && from === back(n - 1)) return n + 'd';
+    if (from === t.slice(0, 4) + '-01-01' && to === t.slice(0, 4) + '-12-31') return 'ano';
+    return 'custom';
+  });
+  setPeriod(p: string) {
+    const t = today(), back = (n: number) => new Date(Date.now() - n * 864e5).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+    this.customMode.set(p === 'custom');
+    const r: Record<string, [string, string] | null> = {
+      mes: null, hoje: [t, t], '7d': [back(6), t], '15d': [back(14), t], '30d': [back(29), t],
+      ano: [t.slice(0, 4) + '-01-01', t.slice(0, 4) + '-12-31'], custom: [this.range().from, this.range().to],
+    };
+    const v = r[p];
+    this.router.navigate([], { queryParams: { de: v?.[0] ?? null, ate: v?.[1] ?? null }, queryParamsHandling: 'merge', replaceUrl: true });
+  }
+  setRange(de: string, ate: string) { if (de && ate) this.router.navigate([], { queryParams: { de, ate }, queryParamsHandling: 'merge', replaceUrl: true }); }
   catSel = computed(() => this.cat() ?? '');
   origin = computed(() => this.o() ?? '');
   q = signal('');
@@ -138,7 +186,12 @@ export class Transactions {
   rows = signal<Tx[]>([]);
   loading = signal(true);
 
-  label = computed(() => monthLabel(this.month()));
+  label = computed(() => {
+    const r = this.range(), f = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
+    if (!r.custom) return monthLabel(this.month());
+    const p = this.periodOptions.find((o) => o.value === this.period() && o.value !== 'custom');
+    return p ? p.label : r.from === r.to ? f(r.from) : `${f(r.from)} – ${f(r.to)}`;
+  });
   icon = (t: Tx) => (t.source === 'invoice' ? 'receipt_long' : t.transfer_id ? 'swap_horiz' : t.pays_card_id ? 'credit_card' : catIcon(this.store.catById().get(t.category_id ?? '')));
 
   /** Fluxo de caixa (como no Organizze): sem compras do cartão; a fatura em aberto entra como uma linha no vencimento. */
@@ -149,16 +202,16 @@ export class Transactions {
   pend = signal<{ amount: number; account_id: string }[]>([]);
   accIds = computed(() => {
     const [t, id] = this.origin().split(':');
-    return new Set(t === 'a' ? [id] : this.store.accounts().filter((a) => !a.archived).map((a) => a.id));
+    return new Set(t === 'a' ? [id] : this.store.accounts().filter((a) => !a.archived && !a.hide_from_total).map((a) => a.id));
   });
   scopedInvs = computed(() => {
     const [t, id] = this.origin().split(':');
     return this.invs().filter((i) => t !== 'a' || this.store.cards().find((c) => c.id === i.card_id)?.payment_account_id === id);
   });
-  invRows = computed<Tx[]>(() => this.scopedInvs().filter((i) => i.invoice_date >= this.month() && i.due > 0).map((i) => ({
+  invRows = computed<Tx[]>(() => this.scopedInvs().filter((i) => i.invoice_date >= this.range().from && i.invoice_date <= this.range().to && i.due > 0).map((i) => ({
     id: 'inv:' + i.card_id + ':' + i.invoice_date, description: 'Fatura ' + (this.store.originName().get(i.card_id) ?? ''), amount: -i.due,
     date: i.invoice_date, paid: false, account_id: null, card_id: i.card_id, invoice_date: i.invoice_date, pays_card_id: null,
-    category_id: null, transfer_id: null, group_id: null, installment: null, installments: null, recurring: false, tags: [], notes: null,
+    category_id: null, transfer_id: null, group_id: null, installment: null, installments: null, recurring: false, tags: [], notes: null, attachments: [],
     source: 'invoice', reviewed: true,
   })));
   /** dívida de cartão até o fim do mês: saldo acumulado (running_due) da última fatura de cada cartão — não soma resíduos antigos duas vezes */
@@ -167,7 +220,7 @@ export class Transactions {
     for (const i of this.scopedInvs()) if ((last.get(i.card_id)?.invoice_date ?? '') < i.invoice_date) last.set(i.card_id, i);
     return [...last.values()].reduce((s, i) => s + Math.max(0, i.running_due), 0);
   });
-  endLabel = computed(() => new Date(monthEnd(this.month()) + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }));
+  endLabel = computed(() => new Date(this.range().to + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }));
   cashBox = computed(() => {
     const ids = this.accIds();
     const now = this.store.accounts().filter((a) => ids.has(a.id)).reduce((s, a) => s + a.balance, 0);
@@ -259,17 +312,18 @@ export class Transactions {
   });
 
   constructor() {
-    effect(() => { this.store.version(); const m = this.month(), o = this.origin(); untracked(() => this.fetch(m, o)); });
+    effect(() => { this.store.version(); const r = this.range(), o = this.origin(); untracked(() => this.fetch(r.from, r.to, o)); });
+    effect(() => { const q = this.qParam(); if (q) untracked(() => { this.q.set(q); this.searching.set(true); }); });
   }
 
-  async fetch(month: string, origin: string) {
+  async fetch(month: string, until: string, origin: string) {
     this.loading.set(true);
     this.sel.set(this.empty);
-    let q = sb.from('transactions').select('*').gte('date', month).lte('date', monthEnd(month));
+    let q = sb.from('transactions').select('*').gte('date', month).lte('date', until);
     const [t, id] = origin.split(':');
     if (t === 'a') q = q.eq('account_id', id);
     if (t === 'c') q = q.eq('card_id', id);
-    const end = monthEnd(month);
+    const end = until;
     const [rows, invs, pend] = await Promise.all([
       must(q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id')),
       must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
@@ -287,10 +341,11 @@ export class Transactions {
   openSearch() { this.searching.set(true); setTimeout(() => document.getElementById('search')?.focus()); }
   clearAll() {
     this.kind.set(''); this.paidSel.set(''); this.q.set(''); this.searching.set(false);
-    this.router.navigate([], { queryParams: { o: null, cat: null }, queryParamsHandling: 'merge', replaceUrl: true });
+    this.customMode.set(false);
+    this.router.navigate([], { queryParams: { o: null, cat: null, q: null, de: null, ate: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
   go(n: number) {
-    this.setParam('m', addMonths(this.month(), n).slice(0, 7));
+    this.router.navigate([], { queryParams: { m: addMonths(this.month(), n).slice(0, 7), de: null, ate: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
 
   async togglePaid(t: Tx) {

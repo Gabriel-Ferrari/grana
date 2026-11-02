@@ -359,7 +359,7 @@ kbd { font: 650 .72rem var(--font); padding: .1rem .35rem; border-radius: 5px; b
 @media (max-width: 860px) { .login { grid-template-columns: 1fr; } .login-art { min-height: 46dvh; } .ledger { display: none; } }
 
 /* ───────── movimento ───────── */
-.reveal > * { animation: rise .6s var(--ease) both; }
+.reveal > * { animation: rise .6s var(--ease) backwards; /* backwards: depois de animar não fica transform, que prenderia os position:fixed (popovers) */ }
 .reveal > *:nth-child(2) { animation-delay: 50ms; }
 .reveal > *:nth-child(3) { animation-delay: 100ms; }
 .reveal > *:nth-child(4) { animation-delay: 150ms; }
@@ -391,7 +391,7 @@ kbd { font: 650 .72rem var(--font); padding: .1rem .35rem; border-radius: 5px; b
 .cc .bank-logo { border-color: transparent; box-shadow: 0 2px 6px oklch(0% 0 0 / .18); }
 .net-logo { width: 26px; height: 26px; border-radius: 7px; background: white; padding: 3px; flex: none; border: 1px solid var(--line); }
 .net-logo.light { border-color: transparent; }
-.bank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: .45rem; max-height: 236px; overflow: auto; padding: .15rem; margin: -.4rem 0 0; }
+.bank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: .45rem; max-height: 236px; overflow: auto; flex: none; padding: .15rem; margin: -.4rem 0 0; }
 .bank-grid button { display: flex; flex-direction: column; align-items: center; gap: .4rem; padding: .7rem .35rem .6rem; border-radius: 14px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: .74rem; font-weight: 650; color: var(--ink-2); text-align: center; line-height: 1.15; transition: border-color .2s, background .2s, transform .15s var(--ease); }
 .bank-grid button:hover { border-color: color-mix(in oklch, var(--brand) 45%, var(--line)); }
 .bank-grid button:active { transform: scale(.96); }
@@ -661,3 +661,18 @@ body:has(.sel-bar) .toast { margin-bottom: 6.6rem; }
 /* toque longo seleciona o lançamento, não o texto */
 @media (hover: none) { .item.click { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
 @media (max-width: 560px) { .inv-break b { font-size: .9rem; letter-spacing: -.02em; } .inv-break { gap: .5rem .8rem; } }
+
+/* parcelado: opções "Nx R$ valor" (Organizze) */
+.parc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: .4rem; margin-top: .6rem; }
+.parc-grid button { display: grid; gap: .1rem; padding: .5rem .4rem; border-radius: 12px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; text-align: center; font: inherit; }
+.parc-grid button b { font-size: .95rem; }
+.parc-grid button span { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.parc-grid button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.parc-grid button.on span { color: inherit; opacity: .8; }
+.parc-sum { margin: .55rem 0 0; font-variant-numeric: tabular-nums; }
+/* anexos */
+.att-list { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-top: .3rem; }
+.att { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.att button { display: inline-flex; align-items: center; gap: .3rem; border: 0; background: transparent; color: var(--ink); padding: .35rem .55rem; cursor: pointer; font: inherit; font-size: .85rem; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.att .att-x { padding: .35rem .4rem; color: var(--muted); border-left: 1px solid var(--line); }
+.att-add { cursor: pointer; font-size: .88rem; }

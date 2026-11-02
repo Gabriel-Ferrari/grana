@@ -83,8 +83,24 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                   </span>
                 }
               </div>
+              @if (f.repeat === 'parcelado') {
+                <!-- como no Organizze: cada opção mostra quantas parcelas e o valor de cada -->
+                <div class="parc-grid" role="radiogroup" aria-label="Número de parcelas">
+                  @for (n of parcOptions; track n) {
+                    <button type="button" role="radio" [attr.aria-checked]="f.times === n" [class.on]="f.times === n" (click)="f.times = n">
+                      <b>{{ n }}x</b><span>{{ fmt(per(n)) }}</span></button>
+                  }
+                </div>
+                <p class="parc-sum"><b>{{ f.times }}x de {{ fmt(per(f.times)) }}</b>@if (first(f.times) !== per(f.times)) { <span class="muted"> (1ª de {{ fmt(first(f.times)) }})</span> }
+                  <span class="muted"> · total {{ fmt(f.cents) }}</span></p>
+              }
               @if (f.repeat === 'fixo') { <small class="muted">Repete todo mês pelos próximos 12 meses.</small> }
             </div>
+          }
+          @if (draft().id && draft().installments; as n) {
+            <div class="tx-row"><span class="lbl">Parcelado</span>
+              <p class="parc-sum" style="margin:0"><b>Parcela {{ draft().installment }} de {{ n }}</b> · {{ fmt(f.cents) }} cada
+                <span class="muted"> · total ≈ {{ fmt(f.cents * n) }}</span></p></div>
           }
           <button type="button" class="btn ghost more-toggle" (click)="more.set(!more())" [attr.aria-expanded]="more()">
             {{ more() ? 'Menos opções' : 'Mais opções' }}<g-icon [name]="more() ? 'chevron_left' : 'expand_more'" [size]="20" />
@@ -93,6 +109,16 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             <div>
               <label class="tx-row"><span class="lbl">Tags</span><span class="tx-val"><g-icon name="sell" class="muted" /><input class="bare" name="t" [(ngModel)]="f.tags" placeholder="viagem, presente…" /></span></label>
               <label class="tx-row"><span class="lbl">Observação</span><span class="tx-val"><g-icon name="notes" class="muted" /><textarea class="bare" name="obs" rows="2" [(ngModel)]="f.notes" placeholder="Opcional"></textarea></span></label>
+              <div class="tx-row"><span class="lbl">Anexos</span>
+                <div class="att-list">
+                  @for (a of f.attachments; track a) {
+                    <span class="att"><button type="button" (click)="openAtt(a)" [title]="'Abrir ' + attName(a)"><g-icon [name]="a.endsWith('.pdf') ? 'description' : 'image'" [size]="18" />{{ attName(a) }}</button>
+                      <button type="button" class="att-x" (click)="f.attachments = f.attachments.filter(x => x !== a)" [attr.aria-label]="'Tirar ' + attName(a)"><g-icon name="close" [size]="16" /></button></span>
+                  }
+                  <label class="btn ghost att-add"><g-icon name="attach_file" [size]="18" />{{ uploading() ? 'Enviando…' : 'Adicionar anexo' }}
+                    <input type="file" accept="image/*,application/pdf" multiple hidden (change)="upload($event)" [disabled]="uploading()" /></label>
+                </div>
+              </div>
             </div>
           </div>
         }
@@ -141,7 +167,34 @@ export class TxForm implements OnInit {
   f = {
     description: '', cents: 0, date: today(), paid: true,
     origin: '', to: '', category_id: '', repeat: 'none' as 'none' | 'parcelado' | 'fixo', times: 2, tags: '', notes: '',
+    attachments: [] as string[],
   };
+  parcOptions = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 18, 24];
+  /** valor de cada parcela (a 1ª leva os centavos que sobram, como no save) */
+  per = (n: number) => Math.floor(this.f.cents / n);
+  first = (n: number) => this.f.cents - this.per(n) * (n - 1);
+  uploading = signal(false);
+  attName = (p: string) => p.split('/').pop()!.replace(/^[0-9a-f-]{36}-/, '');
+  /** comprovantes: bucket privado "anexos", pasta do usuário; abre por link assinado de 10 min */
+  async upload(e: Event) {
+    const input = e.target as HTMLInputElement, uid = this.store.session()?.user.id;
+    if (!uid || !input.files?.length) return;
+    this.uploading.set(true);
+    try {
+      for (const file of Array.from(input.files)) {
+        if (file.size > 10 * 1024 * 1024) { notify(`${file.name}: máximo 10 MB`, { tone: 'error' }); continue; }
+        const path = `${uid}/${crypto.randomUUID()}-${file.name.normalize('NFD').replace(/[^\w.-]+/g, '_')}`;
+        const { error } = await sb.storage.from('anexos').upload(path, file, { contentType: file.type });
+        if (error) { notify(error.message, { tone: 'error' }); continue; }
+        this.f.attachments = [...this.f.attachments, path];
+      }
+    } finally { this.uploading.set(false); input.value = ''; }
+  }
+  async openAtt(path: string) {
+    const { data, error } = await sb.storage.from('anexos').createSignedUrl(path, 600);
+    if (error) return notify(error.message, { tone: 'error' });
+    window.open(data.signedUrl, '_blank', 'noopener');
+  }
 
   accounts = computed(() => this.store.accounts().filter((a) => !a.archived));
   cards = computed(() => this.store.cards().filter((c) => !c.archived));
@@ -202,8 +255,9 @@ export class TxForm implements OnInit {
       category_id: d.category_id ?? '',
       tags: (d.tags ?? []).join(', '),
       notes: d.notes ?? '',
+      attachments: [...(d.attachments ?? [])],
     });
-    this.more.set(!!(d.tags?.length || d.notes));
+    this.more.set(!!(d.tags?.length || d.notes || d.attachments?.length));
     this.keypad.set(this.mobile && !d.id && !d.amount);
     if (!d.id && d.description) this.suggestSoon();
     sb.rpc('report_by_category', { p_from: addMonths(today(), -2), p_to: today() }).then(({ data }) =>
@@ -285,7 +339,7 @@ export class TxForm implements OnInit {
       } else {
         const base = {
           description: this.f.description.trim(), account_id, card_id, category_id: this.f.category_id || null,
-          tags, notes: this.f.notes || null, paid: card_id ? true : this.f.paid,
+          tags, notes: this.f.notes || null, paid: card_id ? true : this.f.paid, attachments: this.f.attachments,
         };
         if (d.id) {
           await must(sb.from('transactions').update({ ...base, amount: sign * total, date: this.f.date, reviewed: true }).eq('id', d.id));
@@ -316,7 +370,7 @@ export class TxForm implements OnInit {
         void this.store.offerSameDesc({ id: d.id, description: this.f.description }, this.f.category_id);
       if (another) {
         // mantém tipo, conta e data; limpa o resto (como "salvar e incluir outro" do Meu Dinheiro)
-        Object.assign(this.f, { cents: 0, description: '', category_id: '', repeat: 'none', tags: '', notes: '' });
+        Object.assign(this.f, { cents: 0, description: '', category_id: '', repeat: 'none', tags: '', notes: '', attachments: [] });
         this.hints.set([]);
         if (this.mobile) this.keypad.set(true); else this.money()?.focus();
         return;

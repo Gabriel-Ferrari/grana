@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
-import { Pace, RankBars, RankItem } from '../charts';
+import { Meter, Pace, RankBars, RankItem } from '../charts';
 import { BrlPipe, Card, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, notify, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
 import { invoiceStatus } from '../invoice';
 import { Icon } from '../icon';
@@ -8,7 +8,7 @@ import { BankLogo } from '../banks';
 import { ChipOption, ChipSelect } from '../fields';
 
 @Component({
-  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo, ChipSelect],
+  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo, ChipSelect, Meter],
   template: `
     <div class="page-title reveal">
       <div>
@@ -80,6 +80,21 @@ import { ChipOption, ChipSelect } from '../fields';
             <a routerLink="/relatorios">Relatórios <g-icon name="chevron_right" [size]="18" /></a>
           </div>
           <g-rank-bars [items]="byCategory()" (pick)="openCategory($event)" empty="Nenhuma despesa neste mês ainda." />
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><div><h2>Equilíbrio financeiro</h2><p class="muted small" style="margin:.15rem 0 0">Regra 50/30/20: essenciais até 50% da renda, o resto até 30%, guardar 20%</p></div>
+            <a routerLink="/ajustes">Essenciais <g-icon name="chevron_right" [size]="18" /></a></div>
+          @if (bal().inc > 0) {
+            <div class="stack" style="gap:1rem">
+              <g-meter label="Essenciais" [value]="bal().ess" [max]="bal().inc * 0.5" />
+              <g-meter label="Não essenciais" [value]="bal().non" [max]="bal().inc * 0.3" />
+              <p style="margin:0;font-weight:650" [class.neg]="bal().left < bal().inc * 0.2" [class.pos]="bal().left >= bal().inc * 0.2">
+                Sobra do mês {{ bal().left | brl }} · {{ bal().leftPct }}% da renda {{ bal().left >= bal().inc * 0.2 ? '— meta de 20% batida' : '(meta: 20%)' }}</p>
+            </div>
+          } @else {
+            <div class="empty-state"><g-icon name="savings" /><div><b>Sem renda lançada neste mês</b>Quando o salário entrar, o grana mostra quanto dá para gastar em cada lado e quanto sobra para guardar.</div></div>
+          }
         </section>
       </div>
 
@@ -181,6 +196,14 @@ export class Home {
   hello = (() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })();
   loading = signal(true);
   month = signal({ income: 0, expense: 0 });
+  /** 50/30/20 com as categorias marcadas como essenciais (Ajustes) */
+  bal = computed(() => {
+    const byId = this.store.catById();
+    let ess = 0, non = 0;
+    for (const c of this.cats()) (byId.get(c.category_id ?? '')?.essential ? (ess += c.expense) : (non += c.expense));
+    const inc = this.month().income, left = inc - ess - non;
+    return { inc, ess, non, left, leftPct: inc ? Math.round(left / inc * 100) : 0 };
+  });
   daily = signal<{ day: string; expense: number }[]>([]);
   cats = signal<{ category_id: string | null; expense: number }[]>([]);
   bills = signal<Tx[]>([]);
@@ -197,8 +220,10 @@ export class Home {
 
   accounts = computed(() => this.store.accounts().filter((a) => !a.archived));
   cards = computed(() => this.store.cards().filter((c) => !c.archived));
-  total = computed(() => this.accounts().reduce((s, a) => s + a.balance, 0));
-  forecast = computed(() => this.accounts().reduce((s, a) => s + a.forecast, 0) - this.invoices().filter((i) => i.invoice_date <= monthEnd(this.hoje)).reduce((s, i) => s + i.due, 0));
+  /** contas que somam no saldo geral (Ajustes > conta > "Não somar no saldo geral") */
+  inTotal = computed(() => this.accounts().filter((a) => !a.hide_from_total));
+  total = computed(() => this.inTotal().reduce((s, a) => s + a.balance, 0));
+  forecast = computed(() => this.inTotal().reduce((s, a) => s + a.forecast, 0) - this.invoices().filter((i) => i.invoice_date <= monthEnd(this.hoje)).reduce((s, i) => s + i.due, 0));
   icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
   bank = (name: string, c: string | null) => bankColor(name, c) ?? 'var(--brand)';
 

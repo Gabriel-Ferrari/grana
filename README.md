@@ -24,7 +24,7 @@ npx supabase start -x studio,imgproxy,vector,logflare,realtime,storage-api,postg
 npx supabase functions serve            # outro terminal
 cd web && npm i && npx ng serve          # http://localhost:4200 (login dev por e-mail/senha)
 ```
-Testes: `node --test supabase/functions/ingest/parser.test.ts supabase/functions/pluggy/map.test.ts web/src/app/invoice.spec.ts web/src/app/recurring.spec.ts` e
+Testes: `node --test supabase/functions/ingest/parser.test.ts supabase/functions/pluggy/map.test.ts web/src/app/*.spec.ts` e
 `docker exec -i supabase_db_grana psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/check.sql`.
 
 Usuário dev local: crie com

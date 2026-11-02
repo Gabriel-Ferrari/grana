@@ -154,7 +154,7 @@ export interface ChipOption { value: string; label: string; icon?: string; color
     }
     @if (open()) {
       <div class="fpop-scrim" (click)="open.set(false)"></div>
-      <div class="fpop" role="listbox" [attr.aria-label]="label()" [style.top.px]="pos()?.top" [style.bottom.px]="pos()?.bottom" [style.left.px]="pos()?.left" [style.width.px]="pos()?.width">
+      <div class="fpop" role="listbox" [attr.aria-label]="label()" [style.top]="pos() ? (pos()!.top != null ? pos()!.top + 'px' : 'auto') : null" [style.bottom.px]="pos()?.bottom" [style.left.px]="pos()?.left" [style.width.px]="pos()?.width" [style.max-height.px]="pos()?.maxH">
         <div class="fpop-head"><b>{{ label() }}</b>
           @if (value() && clearable()) { <button type="button" class="btn ghost" (click)="pick('')">Limpar</button> }
           <button type="button" class="btn ghost icon" (click)="open.set(false)" aria-label="Fechar"><span class="ms">close</span></button></div>
@@ -188,7 +188,7 @@ export class ChipSelect {
   open = signal(false);
   q = signal('');
   /** desktop: posição fixa calculada do chip (não é cortada por cards vizinhos); celular: folha de baixo via CSS */
-  pos = signal<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+  pos = signal<{ top?: number; bottom?: number; left: number; width: number; maxH: number } | null>(null);
   private host = inject(ElementRef<HTMLElement>);
   current = computed(() => this.options().find((o) => o.value === this.value()));
   filtered = computed(() => {
@@ -201,7 +201,10 @@ export class ChipSelect {
       const r = (this.host.nativeElement as HTMLElement).getBoundingClientRect();
       const width = Math.max(r.width, 300), left = Math.min(r.left, innerWidth - width - 12);
       const below = innerHeight - r.bottom;
-      this.pos.set(below > 320 || below > r.top ? { top: r.bottom + 6, left, width } : { bottom: innerHeight - r.top + 6, left, width });
+      // abre para baixo se couber (ou se houver mais espaço embaixo); senão para cima. Altura limitada ao espaço visível.
+      this.pos.set(below > 320 || below > r.top
+        ? { top: r.bottom + 6, left, width, maxH: Math.min(400, below - 18) }
+        : { bottom: innerHeight - r.top + 6, left, width, maxH: Math.min(400, r.top - 18) });
     } else this.pos.set(null);
     this.open.update((o) => !o);
   }

@@ -313,3 +313,46 @@ export class Meter {
     return 'ok';
   });
 }
+
+// ───────────────────────── Saldo nas contas ao longo do período (Balanço) ─────────────────────────
+@Component({
+  selector: 'g-balance',
+  template: `<div class="chart-box" style="height:200px"><canvas #cv role="img" [attr.aria-label]="label()"></canvas></div>`,
+  host: { style: 'display:block' },
+})
+export class BalanceLine {
+  /** saldo no fim de cada período (centavos) */
+  points = input<{ label: string; value: number }[]>([]);
+  label = computed(() => `Saldo nas contas: de ${money(this.points()[0]?.value ?? 0, false)} a ${money(this.points().at(-1)?.value ?? 0, false)}`);
+  cv = viewChild.required<ElementRef<HTMLCanvasElement>>('cv');
+  private c = useChart(this.cv, (t) => {
+    const pts = this.points(), neg = pts.some((p) => p.value < 0);
+    return {
+      type: 'line',
+      data: {
+        labels: pts.map((p) => p.label),
+        datasets: [{
+          label: 'Saldo', data: pts.map((p) => p.value), borderColor: t.ink2, borderWidth: 2, tension: 0.25, fill: false,
+          pointRadius: pts.map((_, i) => (i === pts.length - 1 ? 5 : 0)), pointHoverRadius: 5,
+          pointBackgroundColor: t.ink2, pointBorderColor: t.surface, pointBorderWidth: 2,
+          segment: { borderColor: (ctx: { p1: { parsed: { y: number } } }) => (ctx.p1.parsed.y < 0 ? t.out : t.ink2) },
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 700, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false }, layout: { padding: { top: 8, right: 8 } },
+        scales: {
+          x: { grid: { display: false }, border: { color: t.line }, ticks: { color: t.muted, font: { family: t.font, size: 11 }, maxTicksLimit: 8, maxRotation: 0 } },
+          y: { beginAtZero: neg, border: { display: false }, grid: { color: (c: { tick: { value: number } }) => (c.tick.value === 0 ? t.muted : t.line) },
+               ticks: { color: t.muted, font: { family: t.font, size: 11 }, maxTicksLimit: 4, callback: (v: string | number) => money(Number(v)) } },
+        },
+        plugins: {
+          legend: { display: false },
+          crosshair: { color: alpha(t.ink2, 0.5) },
+          tooltip: { ...tooltipBase(t), callbacks: { label: (item: TooltipItem<'line'>) => ` Saldo ${money(Number(item.raw), false)}` } },
+        } as never,
+      },
+      plugins: [crosshair],
+    } as ChartConfiguration;
+  });
+}
