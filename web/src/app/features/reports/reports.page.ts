@@ -173,6 +173,7 @@ export class Reports {
     store = inject(Store);
     router = inject(Router);
     presets = [
+        { n: 1, label: 'Este mês' },
         { n: 3, label: '3 meses' },
         { n: 6, label: '6 meses' },
         { n: 12, label: '12 meses' },
@@ -292,6 +293,7 @@ export class Reports {
 
     setPreset(n: number) {
         this.preset.set(n);
+        this.gran.set(n === 1 ? 'dia' : 'mes'); // um mês só: balanço por dia
         this.to.set(this.current);
         this.from.set(addMonths(this.current + '-01', -(n - 1)).slice(0, 7));
     }

@@ -12,6 +12,7 @@ const NAV = [
     { to: '/cartoes', label: 'Cartões', icon: 'credit_card' },
     { to: '/relatorios', label: 'Relatórios', icon: 'bar_chart' },
     { to: '/limites', label: 'Limites', icon: 'track_changes' },
+    { to: '/revisar', label: 'Revisar', icon: 'done_all' },
     { to: '/notificacoes', label: 'Notificações', icon: 'notifications' },
     { to: '/ajustes', label: 'Ajustes', icon: 'settings' },
 ];
@@ -122,8 +123,8 @@ const NAV = [
                     @for (n of nav; track n.to) {
                         <a [routerLink]="n.to" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: !!n.exact }">
                             <g-icon [name]="n.icon" [size]="19" />{{ n.label }}
-                            @if (n.to === '/notificacoes' && store.pending()) {
-                                <span class="badge">{{ store.pending() }}</span>
+                            @if (badge(n.to); as b) {
+                                <span class="badge">{{ b }}</span>
                             }
                         </a>
                     }
@@ -192,8 +193,8 @@ const NAV = [
                 <a [routerLink]="nav[2].to" routerLinkActive="on"><g-icon [name]="nav[2].icon" [size]="24" />{{ nav[2].label }}</a>
                 <button popovertarget="more-menu">
                     <g-icon name="more_horiz" [size]="24" />Mais
-                    @if (store.pending()) {
-                        <span class="badge">{{ store.pending() }}</span>
+                    @if (store.pending() + store.toReview()) {
+                        <span class="badge">{{ store.pending() + store.toReview() }}</span>
                     }
                 </button>
             </nav>
@@ -201,8 +202,8 @@ const NAV = [
                 @for (n of nav.slice(3); track n.to) {
                     <a [routerLink]="n.to" (click)="hide('more-menu')"
                         ><g-icon [name]="n.icon" />{{ n.label }}
-                        @if (n.to === '/notificacoes' && store.pending()) {
-                            <span class="badge" style="margin-left:auto">{{ store.pending() }}</span>
+                        @if (badge(n.to); as b) {
+                            <span class="badge" style="margin-left:auto">{{ b }}</span>
                         }
                     </a>
                 }
@@ -252,6 +253,7 @@ export class App {
     store = inject(Store);
     router = inject(Router);
     nav = NAV;
+    badge = (to: string) => (to === '/notificacoes' ? this.store.pending() : to === '/revisar' ? this.store.toReview() : 0);
     toast = toast;
     hidden = hidden;
     theme = theme;

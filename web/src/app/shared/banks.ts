@@ -267,3 +267,26 @@ export const bankColor = (name: string, color?: string | null, institution?: str
 
 /** Nome do banco por pacote Android (usado na tela de notificações). */
 export const bankName = (pkg: string) => bankByPackage(pkg)?.name ?? pkg;
+
+/** Mini cartão de crédito (proporção 1,586:1) na cor do banco, com logo e final — como o Organizze mostra os cartões. */
+@Component({
+    selector: 'g-card-art',
+    imports: [BankLogo],
+    template: `
+        <span class="card-art" [style.--cc]="tone()" [style.width.px]="width()" [style.height.px]="width() / 1.586" [attr.title]="name()">
+            <g-bank [name]="name()" [institution]="institution()" [size]="width() * 0.34" fallback="credit_card" />
+            @if (last4()) {
+                <i>•• {{ last4() }}</i>
+            }
+        </span>
+    `,
+    host: { style: 'display:inline-flex;flex:none' },
+})
+export class CardArt {
+    name = input<string | null | undefined>('');
+    institution = input<string | null | undefined>(null);
+    color = input<string | null | undefined>(null);
+    last4 = input<string | null | undefined>(null);
+    width = input(56);
+    tone = computed(() => bankColor(this.name() ?? '', this.color(), this.institution()) ?? 'var(--forest)');
+}

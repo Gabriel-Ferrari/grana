@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BANKS, Bank, BankLogo, NETWORKS, bankOf, bankPackage, networkLogo, bankName, bankColor } from '../../shared/banks';
+import { BANKS, Bank, BankLogo, CardArt, NETWORKS, bankOf, bankPackage, networkLogo, bankName, bankColor } from '../../shared/banks';
 import { Store, authError, catIcon, must, notify, sb, toCents, today } from '../../core';
 import { CATEGORY_ICONS, Icon } from '../../shared/ui/icon';
 import { OpenFinance } from '../banks/open-finance';
@@ -10,7 +10,7 @@ type Kind = 'accounts' | 'cards' | 'categories';
 type Row = Record<string, any>;
 
 @Component({
-    imports: [FormsModule, Icon, BankLogo, OpenFinance],
+    imports: [FormsModule, Icon, BankLogo, CardArt, OpenFinance],
     template: `
         <div class="page-title reveal"><h1>Ajustes</h1></div>
 
@@ -53,7 +53,13 @@ type Row = Record<string, any>;
                 <div class="list">
                     @for (c of rows().cards; track c['id']) {
                         <div class="item click" (click)="open('cards', c)" tabindex="0" (keydown.enter)="open('cards', c)">
-                            <g-bank [name]="c['name']" [institution]="c['institution']" fallback="credit_card" />
+                            <g-card-art
+                                [name]="c['name']"
+                                [institution]="c['institution']"
+                                [color]="c['color']"
+                                [last4]="c['last4']"
+                                [width]="54"
+                            />
                             <div class="grow">
                                 <div class="title">
                                     {{ c['name'] }}

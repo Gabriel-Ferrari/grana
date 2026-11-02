@@ -14,6 +14,8 @@ export class Store {
     cards = signal<Card[]>([]);
     categories = signal<Category[]>([]);
     pending = signal(0);
+    /** lançamentos automáticos esperando conferência (página Para revisar) */
+    toReview = signal(0);
     version = signal(0); // incrementa a cada alteração; páginas recarregam com effect()
     form = signal<{ draft: TxDraft; done?: (id: string | null) => void } | null>(null);
     /** chegou pelo link de "esqueci minha senha": pedir senha nova */
@@ -51,16 +53,18 @@ export class Store {
     }
 
     async load() {
-        const [a, c, k, n] = await Promise.all([
+        const [a, c, k, n, r] = await Promise.all([
             sb.from('account_balances').select('*').order('name'),
             sb.from('card_status').select('*').order('name'),
             sb.from('categories').select('*').order('name'),
             sb.from('notifications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
+            sb.from('transactions').select('id', { count: 'exact', head: true }).eq('reviewed', false),
         ]);
         this.accounts.set((a.data ?? []) as Account[]);
         this.cards.set((c.data ?? []) as Card[]);
         this.categories.set((k.data ?? []) as Category[]);
         this.pending.set(n.count ?? 0);
+        this.toReview.set(r.count ?? 0);
         this.version.update((v) => v + 1);
     }
 

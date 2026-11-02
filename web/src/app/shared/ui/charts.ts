@@ -75,6 +75,30 @@ function theme() {
 }
 
 /** Linha vertical que acompanha o ponteiro (o leitor mira na data, não numa linha de 2px). */
+/** Linha vertical tracejada marcando "hoje" no gráfico de ritmo (índice em options.plugins.today.index). */
+const todayLine: Plugin = {
+    id: 'today',
+    afterDatasetsDraw(chart) {
+        const o = (chart.options.plugins as { today?: { index: number; color: string; font: string } }).today;
+        if (!o || o.index < 0) return;
+        const x = chart.scales['x'].getPixelForValue(o.index);
+        const { ctx, chartArea } = chart;
+        ctx.save();
+        ctx.strokeStyle = o.color;
+        ctx.setLineDash([3, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x, chartArea.top + 14);
+        ctx.lineTo(x, chartArea.bottom);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = o.color;
+        ctx.font = `600 11px ${o.font}`;
+        ctx.textAlign = x > chartArea.right - 30 ? 'right' : 'center';
+        ctx.fillText('hoje', x, chartArea.top + 10);
+        ctx.restore();
+    },
+};
+
 const crosshair: Plugin = {
     id: 'crosshair',
     afterDatasetsDraw(chart) {
@@ -202,9 +226,9 @@ export class RankBars {
     selector: 'g-pace',
     template: `
         <div class="legend">
-            <span><i class="key cur"></i>Este mês</span>
-            <span><i class="key proj"></i>Previsão</span>
-            <span><i class="key avg"></i>Média 3 meses</span>
+            <span><i class="key cur"></i>Este mês, até hoje</span>
+            <span><i class="key proj"></i>Previsão até o fim do mês</span>
+            <span><i class="key avg"></i>Normal (últimos 3 meses)</span>
         </div>
         <div class="chart-box" style="height:220px"><canvas #cv role="img" [attr.aria-label]="label()"></canvas></div>
     `,
@@ -273,7 +297,7 @@ export class Pace {
                         order: 2,
                     },
                     {
-                        label: 'Média 3 meses',
+                        label: 'Normal',
                         data: this.average(),
                         borderColor: t.muted,
                         borderWidth: 2,
@@ -314,6 +338,7 @@ export class Pace {
                 plugins: {
                     legend: { display: false },
                     crosshair: { color: alpha(t.ink2, 0.5) },
+                    today: { index: n - 1, color: t.muted, font: t.font },
                     tooltip: {
                         ...tooltipBase(t),
                         filter: (item: TooltipItem<'line'>) => item.raw !== null && item.raw !== undefined,
@@ -324,7 +349,7 @@ export class Pace {
                     },
                 } as never,
             },
-            plugins: [crosshair],
+            plugins: [crosshair, todayLine],
         } as ChartConfiguration;
     });
     constructor() {
