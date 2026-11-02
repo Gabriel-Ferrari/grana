@@ -3,14 +3,15 @@ import { createClient, Session } from '@supabase/supabase-js';
 import { env } from '../env';
 import type { TxDraft } from './tx-form';
 import { guessIcon } from './icon';
+import { bankOf } from './banks';
 
 export const sb = createClient(env.supabaseUrl, env.supabaseKey);
 
-export interface Account { id: string; name: string; kind: string; color: string | null; archived: boolean; balance: number; forecast: number }
+export interface Account { id: string; name: string; kind: string; color: string | null; archived: boolean; balance: number; forecast: number; institution: string | null }
 export interface Card {
   id: string; name: string; limit_cents: number; closing_day: number; due_day: number; color: string | null;
   archived: boolean; last4: string | null; payment_account_id: string | null; available: number;
-  current_invoice_date: string; current_invoice_due: number;
+  current_invoice_date: string; current_invoice_due: number; institution: string | null; network: string | null;
 }
 export interface Category { id: string; name: string; kind: 'expense' | 'income'; color: string; parent_id: string | null; archived: boolean; icon: string | null }
 export const catIcon = (c?: Pick<Category, 'icon' | 'name'> | null) => c?.icon || (c ? guessIcon(c.name) : 'swap_horiz');
@@ -39,13 +40,8 @@ export const toCents = (v: number | string) => Math.round(Number(String(v).repla
 export const brl = (cents: number, compact = false) =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', ...(compact ? { notation: 'compact', maximumFractionDigits: 1 } : {}) });
 
-const BANK_COLORS: [RegExp, string][] = [
-  [/nubank|\bnu\b/i, '#820ad1'], [/bradesco/i, '#cc092f'], [/sicoob/i, '#00a091'], [/caixa/i, '#005ca9'], [/\binter\b/i, '#ff7a00'],
-  [/ita[uú]/i, '#ec7000'], [/santander/i, '#cc0000'], [/\bc6\b/i, '#2b2b2b'], [/banco do brasil|\bbb\b/i, '#0038a8'],
-  [/picpay/i, '#11c76f'], [/mercado ?pago/i, '#00b1ea'], [/\bxp\b/i, '#1c1c1c'], [/btg/i, '#05132a'], [/rappi/i, '#ff441f'],
-];
-/** Cor salva, ou a do banco pelo nome (cartões/contas importados vêm sem cor). */
-export const bankColor = (name: string, color?: string | null) => color || BANK_COLORS.find(([r]) => r.test(name))?.[1] || null;
+/** Cor salva, ou a do banco (escolhido ou pelo nome) — contas/cartões importados vêm sem cor. */
+export const bankColor = (name: string, color?: string | null, institution?: string | null) => color || bankOf(name, institution)?.color || null;
 
 /** Ocultar valores (olho): lido pelo pipe brl. */
 export const hidden = signal(localStorage.getItem('grana.hidden') === '1');
@@ -80,6 +76,17 @@ export function notify(text: string, opts: { tone?: Toast['tone']; action?: Toas
   toastTimer = setTimeout(() => toast.set(null), opts.action ? 6000 : 3500);
 }
 
+/** Mensagens do Supabase Auth em português. */
+export function authError(msg: string): string {
+  if (/invalid login credentials/i.test(msg)) return 'E-mail ou senha incorretos.';
+  if (/email not confirmed/i.test(msg)) return 'Confirme seu e-mail antes de entrar.';
+  if (/signups? not allowed|signup is disabled/i.test(msg)) return 'Cadastro fechado: este app é de uso pessoal.';
+  if (/rate limit|too many/i.test(msg)) return 'Muitas tentativas. Espere um pouco e tente de novo.';
+  if (/password should be at least|weak/i.test(msg)) return 'Senha fraca: use pelo menos 8 caracteres, com letras e números.';
+  if (/same.*password|different from the old/i.test(msg)) return 'A nova senha precisa ser diferente da atual.';
+  return msg;
+}
+
 /** Lança erro do supabase como exceção e avisa (evita esquecer de checar `error`). */
 export async function must<T>(p: PromiseLike<{ data: T; error: { message: string } | null }>): Promise<NonNullable<T>> {
   const { data, error } = await p;
@@ -98,6 +105,8 @@ export class Store {
   pending = signal(0);
   version = signal(0); // incrementa a cada alteração; páginas recarregam com effect()
   form = signal<{ draft: TxDraft; done?: (id: string | null) => void } | null>(null);
+  /** chegou pelo link de "esqueci minha senha": pedir senha nova */
+  recovery = signal(false);
 
   catById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
   originName = computed(() => {
@@ -111,7 +120,10 @@ export class Store {
 
   constructor() {
     sb.auth.getSession().then(({ data }) => this.setSession(data.session));
-    sb.auth.onAuthStateChange((_e, s) => this.setSession(s));
+    sb.auth.onAuthStateChange((e, s) => {
+      if (e === 'PASSWORD_RECOVERY') this.recovery.set(true);
+      this.setSession(s);
+    });
   }
 
   open(draft: TxDraft, done?: (id: string | null) => void) {

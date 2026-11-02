@@ -1,34 +1,29 @@
-import { Component, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Store, bankColor, catIcon, must, notify, sb, toCents } from '../core';
+import { BANKS, Bank, BankLogo, NETWORKS, bankByPackage, bankOf, bankPackage, networkLogo } from '../banks';
+import { Store, authError, bankColor, catIcon, must, notify, sb, toCents } from '../core';
 import { CATEGORY_ICONS, Icon } from '../icon';
 
-// Pacotes Android dos bancos (observados no celular + catálogo do Organizze)
-export const PACKAGES: [string, string][] = [
-  ['com.nu.production', 'Nubank'], ['com.bradesco', 'Bradesco'], ['br.com.bradesco.cartoes', 'Bradesco Cartões'],
-  ['br.com.sicoobnet', 'Sicoob'], ['tivit.com.cabal.sicoob.cp', 'Sicoob Cartões'], ['br.com.gabba.Caixa', 'Caixa'],
-  ['com.itau', 'Itaú'], ['br.com.intermedium', 'Inter'], ['com.c6bank.app', 'C6'], ['com.picpay', 'PicPay'],
-  ['com.mercadopago.wallet', 'Mercado Pago'], ['br.com.bb.android', 'Banco do Brasil'], ['br.com.santander.way', 'Santander'],
-];
+/** Nome do banco por pacote Android (usado na tela de notificações). */
+export const bankName = (pkg: string) => bankByPackage(pkg)?.name ?? pkg;
 
 type Kind = 'accounts' | 'cards' | 'categories';
 type Row = Record<string, any>;
 
 @Component({
-  imports: [FormsModule, Icon],
+  imports: [FormsModule, Icon, BankLogo],
   template: `
     <div class="page-title reveal"><h1>Ajustes</h1></div>
-    <datalist id="pk">@for (p of packages; track p[0]) { <option [value]="p[0]">{{ p[1] }}</option> }</datalist>
 
     <div class="grid-2 reveal">
       <section class="panel">
-        <div class="panel-head"><h2>Contas</h2><button class="btn" (click)="edit.set({ kind: 'accounts', row: { kind: 'checking', _initial: 0, color: '#1f6f4a' } })"><g-icon name="add" [size]="18" />Conta</button></div>
+        <div class="panel-head"><h2>Contas</h2><button class="btn" (click)="create('accounts')"><g-icon name="add" [size]="18" />Conta</button></div>
         <div class="list">
           @for (a of rows().accounts; track a['id']) {
-            <div class="item click" (click)="open('accounts', a)">
-              <span class="cat-ico" [style.--cc]="bankColor(a['name'], a['color']) ?? 'var(--brand)'"><span class="ms">account_balance</span></span>
+            <div class="item click" (click)="open('accounts', a)" tabindex="0" (keydown.enter)="open('accounts', a)">
+              <g-bank [name]="a['name']" [institution]="a['institution']" />
               <div class="grow"><div class="title">{{ a['name'] }} @if (a['archived']) { <span class="tag">arquivada</span> }</div>
-                <div class="sub">@if (a['notify_package']) {<g-icon name="notifications" [size]="14" />{{ bank(a['notify_package']) }}} @else { sem notificação ligada }</div></div>
+                <div class="sub">@if (a['notify_package']) {<g-icon name="notifications" [size]="14" />{{ bankName(a['notify_package']) }}} @else { sem notificação ligada }</div></div>
               <g-icon name="chevron_right" class="muted" />
             </div>
           }
@@ -36,13 +31,14 @@ type Row = Record<string, any>;
       </section>
 
       <section class="panel">
-        <div class="panel-head"><h2>Cartões</h2><button class="btn" (click)="edit.set({ kind: 'cards', row: { closing_day: 1, due_day: 10, _limit: 0, color: '#1f6f4a' } })"><g-icon name="add" [size]="18" />Cartão</button></div>
+        <div class="panel-head"><h2>Cartões de crédito</h2><button class="btn" (click)="create('cards')"><g-icon name="add" [size]="18" />Cartão</button></div>
         <div class="list">
           @for (c of rows().cards; track c['id']) {
-            <div class="item click" (click)="open('cards', c)">
-              <span class="cat-ico" [style.--cc]="bankColor(c['name'], c['color']) ?? 'var(--brand)'"><span class="ms">credit_card</span></span>
+            <div class="item click" (click)="open('cards', c)" tabindex="0" (keydown.enter)="open('cards', c)">
+              <g-bank [name]="c['name']" [institution]="c['institution']" fallback="credit_card" />
               <div class="grow"><div class="title">{{ c['name'] }} @if (c['last4']) { <span class="tag">final {{ c['last4'] }}</span> } @if (c['archived']) { <span class="tag">arquivado</span> }</div>
-                <div class="sub">fecha {{ c['closing_day'] }} · vence {{ c['due_day'] }} · {{ c['notify_package'] ? bank(c['notify_package']) : 'sem notificação' }}</div></div>
+                <div class="sub">fecha {{ c['closing_day'] }} · vence {{ c['due_day'] }} · {{ c['notify_package'] ? bankName(c['notify_package']) : 'sem notificação' }}</div></div>
+              @if (networkLogo(c['network']); as n) { <img class="net-logo" [src]="n" alt="" referrerpolicy="no-referrer" /> }
               <g-icon name="chevron_right" class="muted" />
             </div>
           }
@@ -51,13 +47,13 @@ type Row = Record<string, any>;
     </div>
 
     <section class="panel reveal">
-      <div class="panel-head"><h2>Categorias</h2><button class="btn" (click)="edit.set({ kind: 'categories', row: { kind: 'expense', color: '#1f6f4a', icon: null } })"><g-icon name="add" [size]="18" />Categoria</button></div>
+      <div class="panel-head"><h2>Categorias</h2><button class="btn" (click)="create('categories')"><g-icon name="add" [size]="18" />Categoria</button></div>
       <div class="grid-2">
         @for (k of ['expense', 'income']; track k) {
-          <div><p class="muted small" style="margin:0 0 .3rem">{{ k === 'expense' ? 'Saídas' : 'Entradas' }}</p>
+          <div><p class="muted small" style="margin:0 0 .4rem">{{ k === 'expense' ? 'Saídas' : 'Entradas' }}</p>
             <div class="list">
               @for (c of catsOf(k); track c['id']) {
-                <div class="item click" (click)="open('categories', c)" [style.padding-left]="c['parent_id'] ? '1.8rem' : null">
+                <div class="item click" (click)="open('categories', c)" [style.padding-left]="c['parent_id'] ? '2rem' : null" tabindex="0" (keydown.enter)="open('categories', c)">
                   <span class="cat-ico" [style.--cc]="c['color']"><span class="ms">{{ icon(c) }}</span></span>
                   <div class="grow"><div class="title">{{ c['name'] }}</div></div>
                   <g-icon name="chevron_right" class="muted" />
@@ -69,6 +65,17 @@ type Row = Record<string, any>;
       </div>
     </section>
 
+    <section class="panel reveal">
+      <div class="panel-head"><h2>Segurança</h2><g-icon name="lock" class="muted" /></div>
+      <p class="muted" style="margin:0 0 1rem">Entre também com <b>{{ store.session()?.user?.email }}</b> e uma senha, além do Google.</p>
+      <form class="row wrap end" (ngSubmit)="setPassword()">
+        <label style="min-width:200px">Nova senha <input name="p1" type="password" [(ngModel)]="pass1" minlength="8" required autocomplete="new-password" /></label>
+        <label style="min-width:200px">Repita <input name="p2" type="password" [(ngModel)]="pass2" required autocomplete="new-password" /></label>
+        <button class="btn primary"><g-icon name="lock" [size]="18" />Definir senha</button>
+      </form>
+      <p class="muted small" style="margin:.8rem 0 0">Mínimo de 8 caracteres. Novos cadastros estão fechados: só você entra.</p>
+    </section>
+
     @if (edit(); as e) {
       <div class="scrim" (click)="edit.set(null)"></div>
       <form class="drawer" (ngSubmit)="save(e.kind, e.row)" role="dialog" aria-modal="true">
@@ -77,6 +84,17 @@ type Row = Record<string, any>;
           <button type="button" class="btn ghost icon" (click)="edit.set(null)" aria-label="Fechar"><g-icon name="close" /></button>
         </header>
         <div class="body">
+          @if (e.kind !== 'categories') {
+            <label>Banco</label>
+            <div class="search"><g-icon name="search" /><input name="bq" placeholder="Buscar banco" [ngModel]="bankQuery()" (ngModelChange)="bankQuery.set($event)" autocomplete="off" /></div>
+            <div class="bank-grid" role="radiogroup" aria-label="Banco">
+              @for (b of banks(); track b.id) {
+                <button type="button" role="radio" [attr.aria-checked]="isBank(e.row, b)" [class.on]="isBank(e.row, b)" (click)="pickBank(e, b)">
+                  <g-bank [institution]="b.id" [size]="34" /><span>{{ b.name }}</span>
+                </button>
+              }
+            </div>
+          }
           <label>Nome <input name="n" [(ngModel)]="e.row['name']" required /></label>
           @switch (e.kind) {
             @case ('accounts') {
@@ -86,9 +104,17 @@ type Row = Record<string, any>;
                   <option value="wallet">Carteira</option><option value="other">Outra</option></select></label>
                 <label>Saldo inicial (R$) <input name="b" type="number" step="0.01" [(ngModel)]="e.row['_initial']" /></label>
               </div>
-              <label>App que notifica Pix/débito <input name="p" list="pk" [(ngModel)]="e.row['notify_package']" placeholder="ex.: com.nu.production" /></label>
             }
             @case ('cards') {
+              <label>Bandeira</label>
+              <div class="row wrap" role="radiogroup" aria-label="Bandeira">
+                @for (n of networks; track n.id) {
+                  <button type="button" class="chip net" role="radio" [attr.aria-checked]="e.row['network'] === n.id" [class.on]="e.row['network'] === n.id"
+                          (click)="e.row['network'] = e.row['network'] === n.id ? null : n.id">
+                    <img [src]="networkLogo(n.id)" alt="" referrerpolicy="no-referrer" />{{ n.name }}
+                  </button>
+                }
+              </div>
               <div class="row">
                 <label>Limite (R$) <input name="l" type="number" step="0.01" [(ngModel)]="e.row['_limit']" /></label>
                 <label>Final <input name="f" maxlength="4" inputmode="numeric" [(ngModel)]="e.row['last4']" placeholder="1234" /></label>
@@ -97,7 +123,6 @@ type Row = Record<string, any>;
                 <label>Fecha dia <input name="c" type="number" min="1" max="31" [(ngModel)]="e.row['closing_day']" required /></label>
                 <label>Vence dia <input name="v" type="number" min="1" max="31" [(ngModel)]="e.row['due_day']" required /></label>
               </div>
-              <label>App que notifica as compras <input name="p" list="pk" [(ngModel)]="e.row['notify_package']" /></label>
               <label>Pago com a conta <select name="pa" [(ngModel)]="e.row['payment_account_id']">
                 <option [ngValue]="null">—</option>
                 @for (a of rows().accounts; track a['id']) { <option [ngValue]="a['id']">{{ a['name'] }}</option> }
@@ -119,11 +144,19 @@ type Row = Record<string, any>;
               </div>
             }
           }
-          <div class="row">
+          @if (e.kind !== 'categories') {
+            <label>App que notifica (lançamento automático)
+              <select name="p" [(ngModel)]="e.row['notify_package']">
+                <option [ngValue]="null">Nenhum</option>
+                @for (b of allBanks; track b.id) { @for (p of b.packages; track p) { <option [ngValue]="p">{{ b.name }} · {{ p }}</option> } }
+              </select>
+            </label>
+          }
+          <div class="row end">
             <label>Cor <input name="cor" type="color" [(ngModel)]="e.row['color']" /></label>
-            <label class="check" style="align-self:flex-end"><input name="ar" type="checkbox" [(ngModel)]="e.row['archived']" /> Arquivado</label>
+            <label class="check"><input name="ar" type="checkbox" [(ngModel)]="e.row['archived']" /> Arquivado</label>
           </div>
-          @if (e.row['id'] && e.kind !== 'categories') { <p class="muted small">Excluir apaga também os lançamentos. Prefira arquivar.</p> }
+          @if (e.row['id'] && e.kind !== 'categories') { <p class="muted small" style="margin:0">Excluir apaga também os lançamentos. Prefira arquivar.</p> }
         </div>
         <footer>
           @if (e.row['id']) { <button type="button" class="btn ghost danger" (click)="remove(e.kind, e.row['id'])"><g-icon name="delete" [size]="18" />Excluir</button> } @else { <span></span> }
@@ -135,13 +168,21 @@ type Row = Record<string, any>;
 })
 export class Settings {
   store = inject(Store);
-  packages = PACKAGES;
   icons = CATEGORY_ICONS;
+  networks = NETWORKS;
+  allBanks = BANKS;
+  networkLogo = networkLogo;
+  bankName = bankName;
   rows = signal<Record<Kind, Row[]>>({ accounts: [], cards: [], categories: [] });
   edit = signal<{ kind: Kind; row: Row } | null>(null);
-  bank = (pkg: string) => PACKAGES.find(([p]) => p === pkg)?.[1] ?? pkg;
+  bankQuery = signal('');
+  banks = computed(() => {
+    const q = this.bankQuery().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return BANKS.filter((b) => !q || b.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
+  });
+  pass1 = '';
+  pass2 = '';
   icon = (c: Row) => catIcon(c as never);
-  bankColor = bankColor;
 
   constructor() {
     effect(() => { this.store.version(); untracked(() => this.fetch()); });
@@ -161,9 +202,32 @@ export class Settings {
     this.rows.set({ accounts: a, cards: c, categories: k });
   }
 
+  create(kind: Kind) {
+    this.bankQuery.set('');
+    const row: Row = kind === 'accounts' ? { kind: 'checking', _initial: 0, color: '#1f6f4a', notify_package: null }
+      : kind === 'cards' ? { closing_day: 1, due_day: 10, _limit: 0, color: '#1f6f4a', notify_package: null, network: null }
+      : { kind: 'expense', color: '#1f6f4a', icon: null };
+    this.edit.set({ kind, row });
+  }
+
   open(kind: Kind, r: Row) {
-    const color = kind === 'categories' ? r['color'] : bankColor(r['name'], r['color']) ?? '#1f6f4a';
+    this.bankQuery.set('');
+    const color = kind === 'categories' ? r['color'] : bankColor(r['name'], r['color'], r['institution']) ?? '#1f6f4a';
     this.edit.set({ kind, row: { ...r, color, _initial: (r['initial_balance'] ?? 0) / 100, _limit: (r['limit_cents'] ?? 0) / 100 } });
+  }
+
+  isBank(row: Row, b: Bank) {
+    return bankOf(row['name'], row['institution'])?.id === b.id;
+  }
+
+  /** Escolher o banco preenche nome, cor e app que notifica (dá pra ajustar depois). */
+  pickBank(e: { kind: Kind; row: Row }, b: Bank) {
+    const r = e.row;
+    const prev = bankOf(r['name'], r['institution']);
+    r['institution'] = b.id;
+    if (!r['name'] || (prev && r['name'] === prev.name)) r['name'] = b.name;
+    r['color'] = b.color;
+    r['notify_package'] = bankPackage(b, e.kind === 'cards');
   }
 
   async save(kind: Kind, r: Row) {
@@ -182,5 +246,14 @@ export class Settings {
     this.edit.set(null);
     await this.store.load();
     notify('Excluído');
+  }
+
+  async setPassword() {
+    if (this.pass1.length < 8) return notify('Use pelo menos 8 caracteres.', { tone: 'error' });
+    if (this.pass1 !== this.pass2) return notify('As senhas não conferem.', { tone: 'error' });
+    const { error } = await sb.auth.updateUser({ password: this.pass1 });
+    if (error) return notify(authError(error.message), { tone: 'error' });
+    this.pass1 = this.pass2 = '';
+    notify('Senha definida. Agora você também entra com e-mail e senha.');
   }
 }

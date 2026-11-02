@@ -1,8 +1,7 @@
 import { Component, HostListener, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { env } from '../env';
-import { Store, hidden, notify, sb, toast, toggleHidden } from './core';
+import { Store, authError, hidden, notify, sb, toast, toggleHidden } from './core';
 import { Icon } from './icon';
 import { TxForm } from './tx-form';
 
@@ -41,13 +40,17 @@ const NAV = [
             <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
             Continuar com Google
           </button>
-          @if (!prod) {
-            <form (ngSubmit)="devLogin()" class="row wrap" style="margin-top:1rem">
-              <input name="e" [(ngModel)]="email" placeholder="email (dev)" autocomplete="username" />
-              <input name="p" [(ngModel)]="pass" type="password" placeholder="senha (dev)" autocomplete="current-password" />
-              <button class="btn">Entrar (dev)</button>
-            </form>
-          }
+          <div class="or"><span>ou com e-mail</span></div>
+          <form (ngSubmit)="passwordLogin()" class="col" style="gap:.75rem">
+            <label>E-mail <input name="e" type="email" [(ngModel)]="email" required autocomplete="username" inputmode="email" /></label>
+            <div class="pw">
+              <label>Senha <input name="p" [type]="showPass ? 'text' : 'password'" [(ngModel)]="pass" required autocomplete="current-password" minlength="6" /></label>
+              <button type="button" class="btn ghost icon" (click)="showPass = !showPass" [attr.aria-label]="showPass ? 'Esconder senha' : 'Mostrar senha'"><g-icon [name]="showPass ? 'visibility_off' : 'visibility'" [size]="18" /></button>
+            </div>
+            <button class="btn primary" style="padding:.8rem" [disabled]="busy"><g-icon name="login" [size]="18" />Entrar</button>
+            <button type="button" class="btn ghost" (click)="forgot()" style="align-self:flex-start;font-size:.85rem">Esqueci minha senha</button>
+          </form>
+          <p class="muted small">Primeira vez? Entre com o Google e defina uma senha em Ajustes → Segurança.</p>
         </section>
       </div>
     } @else {
@@ -96,6 +99,18 @@ const NAV = [
       <button class="fab" (click)="store.open({ kind: 'expense' })" aria-label="Novo lançamento"><g-icon name="add" [size]="30" /></button>
 
       @if (store.form(); as f) { <tx-form [draft]="f.draft" (close)="closeForm($event)" /> }
+      @if (store.recovery()) {
+        <div class="scrim"></div>
+        <form class="drawer" (ngSubmit)="setNewPassword()" role="dialog" aria-modal="true" aria-label="Nova senha">
+          <header><h2>Criar nova senha</h2></header>
+          <div class="body">
+            <p class="muted" style="margin:0">Você entrou pelo link de redefinição. Escolha a nova senha.</p>
+            <label>Nova senha <input name="np" type="password" [(ngModel)]="newPass" required minlength="8" autocomplete="new-password" /></label>
+            <label>Repita a senha <input name="np2" type="password" [(ngModel)]="newPass2" required autocomplete="new-password" /></label>
+          </div>
+          <footer><span></span><button class="btn primary" [disabled]="busy"><g-icon name="check" [size]="18" />Salvar senha</button></footer>
+        </form>
+      }
     }
     @if (toast(); as t) {
       <div class="toast" [class.error]="t.tone === 'error'" role="status">
@@ -113,16 +128,39 @@ export class App {
   toast = toast;
   hidden = hidden;
   toggleHidden = toggleHidden;
-  prod = env.production;
   email = '';
   pass = '';
+  showPass = false;
+  busy = false;
+  newPass = '';
+  newPass2 = '';
 
   google() {
     sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin } });
   }
-  async devLogin() {
-    const { error } = await sb.auth.signInWithPassword({ email: this.email, password: this.pass });
-    if (error) notify(error.message, { tone: 'error' });
+  async passwordLogin() {
+    this.busy = true;
+    const { error } = await sb.auth.signInWithPassword({ email: this.email.trim(), password: this.pass });
+    this.busy = false;
+    if (error) notify(authError(error.message), { tone: 'error' });
+  }
+  async forgot() {
+    if (!this.email.includes('@')) return notify('Digite seu e-mail primeiro.', { tone: 'error' });
+    const { error } = await sb.auth.resetPasswordForEmail(this.email.trim(), { redirectTo: location.origin });
+    // mesma resposta exista ou não a conta (não revela quem está cadastrado)
+    if (error && /rate limit/i.test(error.message)) return notify(authError(error.message), { tone: 'error' });
+    notify('Se o e-mail estiver cadastrado, enviamos um link para criar nova senha.');
+  }
+  async setNewPassword() {
+    if (this.newPass.length < 8) return notify('Use pelo menos 8 caracteres.', { tone: 'error' });
+    if (this.newPass !== this.newPass2) return notify('As senhas não conferem.', { tone: 'error' });
+    this.busy = true;
+    const { error } = await sb.auth.updateUser({ password: this.newPass });
+    this.busy = false;
+    if (error) return notify(authError(error.message), { tone: 'error' });
+    this.store.recovery.set(false);
+    this.newPass = this.newPass2 = '';
+    notify('Senha atualizada');
   }
   logout() {
     sb.auth.signOut();

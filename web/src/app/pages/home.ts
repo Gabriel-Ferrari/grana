@@ -3,9 +3,10 @@ import { Router, RouterLink } from '@angular/router';
 import { Pace, RankBars, RankItem } from '../charts';
 import { BrlPipe, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
 import { Icon } from '../icon';
+import { BankLogo } from '../banks';
 
 @Component({
-  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars],
+  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo],
   template: `
     <div class="page-title reveal">
       <div>
@@ -93,10 +94,10 @@ import { Icon } from '../icon';
           <div class="list">
             @for (c of cards(); track c.id) {
               <a class="item click" routerLink="/cartoes" [queryParams]="{ c: c.id }" style="flex-wrap:wrap">
-                <span class="cat-ico" [style.--cc]="bank(c.name, c.color)"><span class="ms">credit_card</span></span>
+                <g-bank [name]="c.name" [institution]="c.institution" fallback="credit_card" />
                 <div class="grow"><div class="title">{{ c.name }}</div><div class="sub">fatura {{ c.current_invoice_date | dmy: true }} · {{ c.current_invoice_due | brl }}</div></div>
                 <span class="amt small">{{ c.available | brl }}<br /><span class="muted" style="font-weight:600">disponível</span></span>
-                <div class="meter" style="width:100%;height:6px;margin:.2rem 0 0" [attr.data-state]="c.available < c.limit_cents * .15 ? 'over' : c.available < c.limit_cents * .4 ? 'warn' : 'ok'">
+                <div class="meter" [attr.data-state]="c.available < c.limit_cents * .15 ? 'over' : c.available < c.limit_cents * .4 ? 'warn' : 'ok'" style="width:100%;height:6px;margin:.35rem 0 0">
                   <span class="fill" [style.width.%]="100 - (c.available / (c.limit_cents || 1)) * 100"></span>
                 </div>
               </a>
@@ -109,7 +110,7 @@ import { Icon } from '../icon';
           <div class="list">
             @for (a of accounts(); track a.id) {
               <a class="item click" routerLink="/lancamentos" [queryParams]="{ o: 'a:' + a.id }">
-                <span class="cat-ico" [style.--cc]="bank(a.name, a.color)"><span class="ms">account_balance</span></span>
+                <g-bank [name]="a.name" [institution]="a.institution" />
                 <div class="grow"><div class="title">{{ a.name }}</div>@if (a.forecast !== a.balance) {<div class="sub">previsto {{ a.forecast | brl }}</div>}</div>
                 <span class="amt" [class.neg]="a.balance < 0">{{ a.balance | brl }}</span>
               </a>

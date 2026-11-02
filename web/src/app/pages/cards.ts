@@ -4,11 +4,12 @@ import { Router, RouterLink } from '@angular/router';
 import { Meter } from '../charts';
 import { BrlPipe, DmyPipe, Invoice, Store, Tx, bankColor, catIcon, monthLabel, must, notify, sb, toCents, today } from '../core';
 import { Icon } from '../icon';
+import { BankLogo, networkLogo } from '../banks';
 
 type Inv = Invoice & { due: number };
 
 @Component({
-  imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, Icon, Meter],
+  imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, Icon, Meter, BankLogo],
   template: `
     <div class="page-title reveal"><h1>Cartões</h1></div>
 
@@ -18,10 +19,12 @@ type Inv = Invoice & { due: number };
 
     <div class="cc-rail reveal" role="tablist">
       @for (c of cards(); track c.id) {
-        <button class="cc" role="tab" [attr.aria-selected]="c.id === card()?.id" [class.on]="c.id === card()?.id" [style.--c]="color(c.name, c.color)"
+        <button class="cc" role="tab" [attr.aria-selected]="c.id === card()?.id" [class.on]="c.id === card()?.id" [style.--c]="color(c.name, c.color, c.institution)"
                 (click)="select(c.id)">
-          <div class="cc-top"><span>{{ c.name }}</span><span class="ms">contactless</span></div>
-          <div class="row between"><span class="cc-chip"></span><span class="cc-num">•••• {{ c.last4 || '····' }}</span></div>
+          <div class="cc-top"><span class="row" style="gap:.6rem"><g-bank [name]="c.name" [institution]="c.institution" [size]="30" fallback="credit_card" />{{ c.name }}</span><span class="ms">contactless</span></div>
+          <div class="row between"><span class="cc-chip"></span>
+            <span class="row" style="gap:.6rem"><span class="cc-num">•••• {{ c.last4 || '····' }}</span>
+              @if (net(c.network); as n) { <img class="net-logo light" [src]="n" alt="" referrerpolicy="no-referrer" /> }</span></div>
           <div class="cc-foot">
             <span>Disponível<b>{{ c.available | brl }}</b></span>
             <span style="text-align:right">Fatura {{ c.current_invoice_date | dmy: true }}<b>{{ c.current_invoice_due | brl }}</b></span>
@@ -101,7 +104,8 @@ export class Cards {
   short = (d: string) => monthLabel(d, true).replace('.', '') + '/' + d.slice(2, 4);
   long = (d: string) => monthLabel(d);
   icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
-  color = (name: string, c: string | null) => bankColor(name, c) ?? 'var(--forest)';
+  color = (name: string, c: string | null, inst: string | null) => bankColor(name, c, inst) ?? 'var(--forest)';
+  net = networkLogo;
 
   constructor() {
     effect(() => {

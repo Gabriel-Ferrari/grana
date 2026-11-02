@@ -3,7 +3,7 @@ import { Component, input } from '@angular/core';
 /** Ícones da interface (Material Symbols Rounded). */
 const UI = [
   'add', 'arrow_downward', 'arrow_upward', 'auto_awesome', 'bar_chart', 'check', 'check_circle', 'chevron_left', 'chevron_right',
-  'close', 'contactless', 'credit_card', 'delete', 'edit', 'error', 'home', 'keyboard', 'logout', 'more_horiz', 'notifications', 'payments',
+  'close', 'contactless', 'credit_card', 'delete', 'edit', 'error', 'home', 'keyboard', 'login', 'logout', 'lock', 'more_horiz', 'notifications', 'payments',
   'receipt_long', 'remove', 'repeat', 'search', 'sell', 'settings', 'smartphone', 'swap_horiz', 'sync_alt', 'track_changes',
   'tune', 'undo', 'visibility', 'visibility_off', 'wallet', 'warning', 'notes', 'expand_more', 'account_balance', 'link',
 ];

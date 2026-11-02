@@ -3,7 +3,8 @@ import { DatePipe } from '@angular/common';
 import { env } from '../../env';
 import { BrlPipe, Store, must, notify, sb } from '../core';
 import { Icon } from '../icon';
-import { PACKAGES } from './settings';
+import { BankLogo, bankByPackage } from '../banks';
+import { bankName } from './settings';
 
 interface Notif {
   id: string; package: string; title: string | null; body: string; posted_at: string; status: string; transaction_id: string | null;
@@ -12,7 +13,7 @@ interface Notif {
 interface Device { token: string; name: string; last_seen_at: string | null; created_at: string }
 
 @Component({
-  imports: [BrlPipe, DatePipe, Icon],
+  imports: [BrlPipe, DatePipe, Icon, BankLogo],
   template: `
     <div class="page-title reveal"><h1>Notificações</h1></div>
 
@@ -21,7 +22,7 @@ interface Device { token: string; name: string; last_seen_at: string | null; cre
       <div class="list">
         @for (n of pending(); track n.id) {
           <div class="item" style="align-items:flex-start">
-            <span class="cat-ico" style="--cc: var(--brand)"><span class="ms">notifications</span></span>
+            <g-bank [institution]="bankId(n.package)" fallback="notifications" />
             <div class="grow">
               <div class="sub">{{ bank(n.package) }} · {{ n.posted_at | date: 'dd/MM HH:mm' }}</div>
               @if (n.title) { <div class="title">{{ n.title }}</div> }
@@ -78,7 +79,8 @@ export class Inbox {
   pending = signal<Notif[]>([]);
   recent = signal<Notif[]>([]);
   devices = signal<Device[]>([]);
-  bank = (pkg: string) => PACKAGES.find(([p]) => p === pkg)?.[1] ?? pkg;
+  bank = bankName;
+  bankId = (pkg: string) => bankByPackage(pkg)?.id ?? null;
   setupLink = (token: string) => `grana://setup?endpoint=${encodeURIComponent(this.endpoint)}&token=${encodeURIComponent(token)}`;
 
   constructor() {
