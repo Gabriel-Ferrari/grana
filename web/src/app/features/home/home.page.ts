@@ -23,6 +23,8 @@ import {
     haptic,
     swr,
     cached,
+    canAskPush,
+    enablePush,
 } from '../../core';
 import { invoiceStatus } from '../cards/invoice';
 import { Icon } from '../../shared/ui/icon';
@@ -138,7 +140,7 @@ function loadLayout(): HomeCard[] {
                                     <g-icon [name]="hidden() ? 'visibility_off' : 'visibility'" />
                                 </button>
                             </div>
-                            <div class="hero-value">{{ total() | brl }}</div>
+                            <div class="hero-value" [class.neg]="total() < 0">{{ total() | brl }}</div>
                             <div class="hero-split">
                                 <div>
                                     <span class="muted small">Entrou em {{ monthShort }}</span
@@ -149,7 +151,8 @@ function loadLayout(): HomeCard[] {
                                     ><b><g-icon name="arrow_upward" [size]="18" />{{ month().expense | brl }}</b>
                                 </div>
                                 <div>
-                                    <span class="muted small">Previsto fim do mês</span><b>{{ forecast() | brl }}</b>
+                                    <span class="muted small">Previsto fim do mês</span
+                                    ><b [class.neg]="forecast() < 0">{{ forecast() | brl }}</b>
                                 </div>
                             </div>
                         </section>
@@ -364,7 +367,7 @@ function loadLayout(): HomeCard[] {
                                                         vence {{ t.date | dmy: true }}
                                                     </div>
                                                 </div>
-                                                <span class="amt neg">{{ -t.amount | brl }}</span>
+                                                <span class="amt neg">{{ t.amount | brl }}</span>
                                                 <button
                                                     class="paid-btn"
                                                     (click)="$event.stopPropagation(); pay(t)"
@@ -382,7 +385,7 @@ function loadLayout(): HomeCard[] {
                                                     <div class="title">Fatura {{ store.originName().get(i.card_id) }}</div>
                                                     <div class="sub">vence {{ i.invoice_date | dmy: true }}</div>
                                                 </div>
-                                                <span class="amt neg">{{ i.due | brl }}</span>
+                                                <span class="amt neg">{{ 0 - i.due | brl }}</span>
                                             </a>
                                         }
                                         @if (!bills().length && !invoices().length) {
@@ -392,6 +395,11 @@ function loadLayout(): HomeCard[] {
                                             </div>
                                         }
                                     </div>
+                                    @if (canAskPush() && bills().length) {
+                                        <button type="button" class="push-ask" (click)="enablePush()">
+                                            <g-icon name="notifications" [size]="20" />Avisar no celular no dia do vencimento
+                                        </button>
+                                    }
                                 </section>
                             }
                             @case ('cartoes') {
@@ -404,13 +412,13 @@ function loadLayout(): HomeCard[] {
                                     <div class="cards-total">
                                         <div>
                                             <span>Faturas de {{ monthName() }}</span
-                                            ><b>{{ cardsMonth().total | brl }}</b>
+                                            ><b [class.neg]="cardsMonth().total > 0">{{ 0 - cardsMonth().total | brl }}</b>
                                         </div>
                                         @if (cardsMonth().due !== cardsMonth().total) {
                                             <div>
                                                 <span>{{ cardsMonth().due ? 'Falta pagar' : 'Situação' }}</span
                                                 ><b [class.neg]="cardsMonth().due > 0" [class.pos]="!cardsMonth().due">{{
-                                                    cardsMonth().due ? (cardsMonth().due | brl) : 'tudo pago'
+                                                    cardsMonth().due ? (0 - cardsMonth().due | brl) : 'tudo pago'
                                                 }}</b>
                                             </div>
                                         }
@@ -441,7 +449,9 @@ function loadLayout(): HomeCard[] {
                                                     </div>
                                                     <div>
                                                         <span>Fatura atual (venc. {{ c.current_invoice_date | dmy: true }})</span
-                                                        ><b>{{ c.current_invoice_due | brl }}</b>
+                                                        ><b [class.neg]="c.current_invoice_due > 0">{{
+                                                            0 - c.current_invoice_due | brl
+                                                        }}</b>
                                                     </div>
                                                 </div>
                                                 <div
@@ -554,6 +564,8 @@ function loadLayout(): HomeCard[] {
     `,
 })
 export class Home {
+    canAskPush = canAskPush;
+    enablePush = () => enablePush();
     store = inject(Store);
     router = inject(Router);
     hidden = hidden;

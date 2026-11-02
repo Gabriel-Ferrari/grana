@@ -1,7 +1,23 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BANKS, Bank, BankLogo, CardArt, NETWORKS, bankOf, bankPackage, networkLogo, bankName, bankColor } from '../../shared/banks';
-import { Store, authError, catIcon, must, notify, sb, toCents, today, suggestPrefs, setSuggestPrefs, byPosition, haptic } from '../../core';
+import {
+    Store,
+    authError,
+    catIcon,
+    must,
+    notify,
+    sb,
+    toCents,
+    today,
+    suggestPrefs,
+    setSuggestPrefs,
+    byPosition,
+    haptic,
+    pushState,
+    enablePush,
+    disablePush,
+} from '../../core';
 import { CATEGORY_ICONS, Icon } from '../../shared/ui/icon';
 import { OpenFinance } from '../banks/open-finance';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
@@ -311,6 +327,37 @@ type Row = Record<string, any>;
             </div>
         </section>
 
+        <section class="panel reveal" id="avisos">
+            <div class="panel-head">
+                <h2>Avisos no celular</h2>
+                <g-icon name="notifications" class="muted" />
+            </div>
+            <p class="muted" style="margin:0 0 1rem">
+                Todo dia às 8h, como no Organizze: contas a pagar e a receber do dia, fatura vencendo ou fechando amanhã, limite chegando
+                perto ou estourado e, às segundas, o que ficou atrasado.
+            </p>
+            @switch (pushState()) {
+                @case ('on') {
+                    <div class="row wrap">
+                        <span class="chip"><g-icon name="check_circle" [size]="16" />Ligados neste aparelho</span>
+                        <button class="btn ghost" (click)="testPush()"><g-icon name="notifications" [size]="18" />Enviar teste</button>
+                        <button class="btn ghost danger" (click)="disablePush()">Desligar</button>
+                    </div>
+                }
+                @case ('blocked') {
+                    <p class="neg" style="margin:0">
+                        Bloqueados. Libere em Configurações do celular › Apps › grana › Notificações e abra o app de novo.
+                    </p>
+                }
+                @case ('unsupported') {
+                    <p class="muted" style="margin:0">Este navegador não manda avisos. No celular, use o app grana.</p>
+                }
+                @default {
+                    <button class="btn primary" (click)="enablePush()"><g-icon name="notifications" [size]="18" />Ativar avisos</button>
+                }
+            }
+        </section>
+
         <section class="panel reveal">
             <div class="panel-head">
                 <h2>Segurança</h2>
@@ -524,6 +571,14 @@ type Row = Record<string, any>;
     `,
 })
 export class Settings {
+    pushState = pushState;
+    enablePush = () => enablePush();
+    disablePush = disablePush;
+    async testPush() {
+        const { data, error } = await sb.functions.invoke('remind', { body: { test: true } });
+        if (error || !data?.enviados) notify('Teste não chegou ao servidor de avisos. Desligue e ligue de novo.', { tone: 'error' });
+        else notify('Teste enviado. Deve chegar em segundos.');
+    }
     store = inject(Store);
     icons = CATEGORY_ICONS;
     networks = NETWORKS;

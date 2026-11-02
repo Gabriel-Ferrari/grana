@@ -1,8 +1,9 @@
 import { Component, HostListener, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { Store, Theme, authError, hidden, notify, sb, setTheme, theme, toast, toggleHidden } from './core';
+import { Store, Theme, asking, authError, enablePush, hidden, notify, onBack, sb, setTheme, theme, toast, toggleHidden } from './core';
 import { Icon } from './shared/ui/icon';
+import { SheetDrag } from './shared/ui/sheet';
 import { TxForm } from './features/transactions/tx-form';
 import { pluggySync } from './features/banks/open-finance';
 
@@ -21,7 +22,7 @@ const NAV = [
 
 @Component({
     selector: 'app-root',
-    imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, Icon, TxForm],
+    imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, Icon, TxForm, SheetDrag],
     template: `
         @if (splash()) {
             <div class="boot" [class.out]="store.ready()" aria-label="Carregando grana">
@@ -141,7 +142,7 @@ const NAV = [
                         <g-icon [name]="hidden() ? 'visibility_off' : 'visibility'" />
                     </button>
                     <button
-                        class="btn ghost icon"
+                        class="btn ghost icon hide-m"
                         (click)="cycleTheme()"
                         [attr.aria-label]="'Tema: ' + themeLabel()"
                         [title]="'Tema: ' + themeLabel()"
@@ -151,7 +152,13 @@ const NAV = [
                     <button class="btn primary hide-m" (click)="store.open({ kind: 'expense' })" title="Novo lançamento (D, R ou T)">
                         <g-icon name="add" />Novo
                     </button>
-                    <button class="btn ghost icon" popovertarget="user-menu" aria-label="Conta">
+                    <!-- celular: o avatar abre a mesma folha do "Mais" (conta, tema, sair) -->
+                    <button
+                        class="btn ghost icon"
+                        [attr.popovertarget]="mobile ? null : 'user-menu'"
+                        (click)="mobile ? more.set(true) : null"
+                        aria-label="Conta"
+                    >
                         @if (store.avatar(); as a) {
                             <img class="avatar" [src]="a" alt="" referrerpolicy="no-referrer" />
                         } @else {
@@ -193,24 +200,60 @@ const NAV = [
                     <span><g-icon name="add" [size]="30" /></span>
                 </button>
                 <a [routerLink]="nav[2].to" routerLinkActive="on"><g-icon [name]="nav[2].icon" [size]="24" />{{ nav[2].label }}</a>
-                <button popovertarget="more-menu">
+                <button (click)="more.set(true)" [class.on]="more()">
                     <g-icon name="more_horiz" [size]="24" />Mais
                     @if (store.pending() + store.toReview()) {
                         <span class="badge">{{ store.pending() + store.toReview() }}</span>
                     }
                 </button>
             </nav>
-            <div id="more-menu" popover class="more-menu">
-                @for (n of nav.slice(3); track n.to) {
-                    <a [routerLink]="n.to" (click)="hide('more-menu')"
-                        ><g-icon [name]="n.icon" />{{ n.label }}
-                        @if (badge(n.to); as b) {
-                            <span class="badge" style="margin-left:auto">{{ b }}</span>
+            @if (more()) {
+                <!-- Mais: folha de baixo com atalhos grandes (como os apps de banco), arrasta para baixo ou voltar fecha -->
+                <div class="scrim" (click)="more.set(false)" (keydown.escape)="more.set(false)" tabindex="-1"></div>
+                <div #moreSheet class="sheet more-sheet" role="dialog" aria-modal="true" aria-label="Mais">
+                    <div class="sheet-grab" [gSheetDrag]="moreSheet" (dismissed)="more.set(false)"><span class="grabber"></span></div>
+                    <div class="more-user">
+                        @if (store.avatar(); as a) {
+                            <img class="avatar" [src]="a" alt="" referrerpolicy="no-referrer" />
+                        } @else {
+                            <span class="avatar"><g-icon name="person" /></span>
                         }
-                    </a>
-                }
-                <button (click)="logout()"><g-icon name="logout" />Sair</button>
-            </div>
+                        <div>
+                            <b>{{ store.firstName() || 'Minha conta' }}</b
+                            ><small>{{ store.session()?.user?.email }}</small>
+                        </div>
+                    </div>
+                    <div class="more-grid">
+                        @for (n of nav.slice(3); track n.to) {
+                            <button type="button" (click)="go(n.to)" [class.on]="router.url.startsWith(n.to)">
+                                <span class="more-ico"
+                                    ><g-icon [name]="n.icon" [size]="26" />
+                                    @if (badge(n.to); as b) {
+                                        <span class="badge">{{ b }}</span>
+                                    }
+                                </span>
+                                {{ n.label }}
+                            </button>
+                        }
+                    </div>
+                    <div class="sheet-row">
+                        <g-icon name="contrast" />Tema
+                        <div class="seg small" role="radiogroup" aria-label="Tema">
+                            @for (o of themes; track o.v) {
+                                <button
+                                    role="radio"
+                                    [attr.aria-checked]="theme() === o.v"
+                                    [class.on]="theme() === o.v"
+                                    (click)="setTheme(o.v)"
+                                >
+                                    {{ o.label }}
+                                </button>
+                            }
+                        </div>
+                    </div>
+                    <button type="button" class="sheet-row danger" (click)="logout()"><g-icon name="logout" />Sair</button>
+                </div>
+            }
 
             @if (store.form(); as f) {
                 <tx-form [draft]="f.draft" (closed)="closeForm($event)" />
@@ -235,6 +278,26 @@ const NAV = [
                 </form>
             }
         }
+        @if (asking(); as a) {
+            <!-- pergunta com opções (ex.: excluir só este ou os próximos) -->
+            <div class="scrim ask-scrim" (click)="a.done(null)" (keydown.escape)="a.done(null)" tabindex="-1"></div>
+            <div #askSheet class="sheet ask-sheet" role="alertdialog" aria-modal="true" [attr.aria-label]="a.title">
+                <div class="sheet-grab" [gSheetDrag]="askSheet" (dismissed)="a.done(null)"><span class="grabber"></span></div>
+                <b class="ask-title">{{ a.title }}</b>
+                @if (a.text) {
+                    <p class="muted ask-text">{{ a.text }}</p>
+                }
+                @for (o of a.options; track o.value) {
+                    <button type="button" class="sheet-row" [class.danger]="o.danger" (click)="a.done(o.value)">
+                        @if (o.icon) {
+                            <g-icon [name]="o.icon" />
+                        }
+                        {{ o.label }}
+                    </button>
+                }
+                <button type="button" class="sheet-row cancel" (click)="a.done(null)">Cancelar</button>
+            </div>
+        }
         @if (toast(); as t) {
             <div class="toast" [class.error]="t.tone === 'error'" role="status">
                 <g-icon [name]="t.tone === 'error' ? 'error' : 'check_circle'" [fill]="true" />
@@ -257,6 +320,14 @@ export class App {
     nav = NAV;
     badge = (to: string) => (to === '/notificacoes' ? this.store.pending() : to === '/revisar' ? this.store.toReview() : 0);
     toast = toast;
+    asking = asking;
+    /** folha do "Mais" (celular) */
+    more = signal(false);
+    mobile = matchMedia('(max-width: 860px)').matches;
+    go(to: string) {
+        this.more.set(false);
+        this.router.navigateByUrl(to);
+    }
     hidden = hidden;
     theme = theme;
     setTheme = setTheme;
@@ -324,9 +395,6 @@ export class App {
     logout() {
         sb.auth.signOut();
     }
-    hide(id: string) {
-        document.getElementById(id)?.hidePopover();
-    }
     closeForm(id: string | null) {
         const f = this.store.form();
         this.store.form.set(null);
@@ -340,9 +408,18 @@ export class App {
         effect(() => {
             if (this.store.ready()) setTimeout(() => this.splash.set(false), 500);
         });
+        // voltar do Android fecha a folha aberta
+        effect((onCleanup) => {
+            if (this.more()) onCleanup(onBack(() => this.more.set(false)));
+        });
+        effect((onCleanup) => {
+            const a = this.asking();
+            if (a) onCleanup(onBack(() => a.done(null)));
+        });
         effect(async () => {
             if (!this.store.session() || this.synced) return;
             this.synced = true;
+            void enablePush(true);
             const { data } = await sb.from('pluggy_items').select('last_sync_at');
             const stale = (data ?? []).some((i) => !i.last_sync_at || Date.now() - Date.parse(i.last_sync_at) > 12 * 3600e3);
             if (stale && (await pluggySync())) await this.store.load();

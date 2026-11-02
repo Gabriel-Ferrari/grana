@@ -1,5 +1,19 @@
-import { Component, DestroyRef, ElementRef, HostListener, computed, inject, input, model, output, signal, viewChild } from '@angular/core';
-import { addMonths, haptic, today } from '../../core';
+import {
+    Component,
+    DestroyRef,
+    ElementRef,
+    HostListener,
+    computed,
+    effect,
+    inject,
+    input,
+    model,
+    output,
+    signal,
+    viewChild,
+} from '@angular/core';
+import { addMonths, haptic, onBack, today } from '../../core';
+import { SheetDrag } from './sheet';
 import { Icon } from './icon';
 import { BankLogo } from '../banks';
 
@@ -258,7 +272,7 @@ export interface ChipOption {
  *  (popover no desktop, folha de baixo no celular). Sem <select> genérico. */
 @Component({
     selector: 'g-chip-select',
-    imports: [BankLogo],
+    imports: [BankLogo, SheetDrag],
     template: `
         @if (variant() === 'row') {
             <button
@@ -303,6 +317,7 @@ export interface ChipOption {
         @if (open()) {
             <div class="fpop-scrim" (click)="open.set(false)" (keydown.escape)="open.set(false)" tabindex="-1"></div>
             <div
+                #pop
                 class="fpop"
                 role="listbox"
                 [attr.aria-label]="label()"
@@ -312,7 +327,7 @@ export interface ChipOption {
                 [style.width.px]="pos()?.width"
                 [style.max-height.px]="pos()?.maxH"
             >
-                <div class="fpop-head">
+                <div class="fpop-head" [gSheetDrag]="pop" (dismissed)="open.set(false)">
                     <b>{{ label() }}</b>
                     @if (value() && clearable()) {
                         <button type="button" class="btn ghost" (click)="pick('')">Limpar</button>
@@ -351,6 +366,20 @@ export interface ChipOption {
                             <span>{{ o.label }}</span>
                         </button>
                     }
+                    @if (createLabel()) {
+                        <!-- criar na própria lista (Organizze): nome já vem da busca -->
+                        @if (creating()) {
+                            <form class="fcreate" (submit)="$event.preventDefault(); make(nm.value)">
+                                <input #nm [value]="q()" placeholder="Nome" aria-label="Nome" />
+                                <button class="btn primary">Criar</button>
+                            </form>
+                        } @else {
+                            <button type="button" class="fopt fnew" (click)="startCreate()">
+                                <span class="cat-ico sm"><span class="ms">add</span></span
+                                ><span>{{ q() ? createLabel() + ' “' + q() + '”' : createLabel() }}</span>
+                            </button>
+                        }
+                    }
                 </div>
             </div>
         }
@@ -366,8 +395,28 @@ export class ChipSelect {
     fallbackIcon = input('category');
     clearable = input(true);
     value = model('');
+    /** opção "+ Nova …" no fim da lista; o pai cria e devolve no value */
+    createLabel = input('');
+    create = output<string>();
+    creating = signal(false);
     open = signal(false);
     q = signal('');
+    constructor() {
+        effect((onCleanup) => {
+            if (this.open()) onCleanup(onBack(() => this.open.set(false)));
+            else this.creating.set(false);
+        });
+    }
+    startCreate() {
+        this.creating.set(true);
+        setTimeout(() => (this.host.nativeElement as HTMLElement).ownerDocument.querySelector<HTMLInputElement>('.fcreate input')?.focus());
+    }
+    make(name: string) {
+        if (!name.trim()) return;
+        this.create.emit(name.trim());
+        this.open.set(false);
+        this.q.set('');
+    }
     /** desktop: posição fixa calculada do chip (não é cortada por cards vizinhos); celular: folha de baixo via CSS */
     pos = signal<{ top?: number; bottom?: number; left: number; width: number; maxH: number } | null>(null);
     private host = inject(ElementRef<HTMLElement>);

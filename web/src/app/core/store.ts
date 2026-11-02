@@ -1,9 +1,9 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { Session } from '@supabase/supabase-js';
 import type { TxDraft } from '../features/transactions/tx-form';
-import { Account, Card, Category, byPosition } from './models';
+import { Account, Card, Category, Tx, byPosition } from './models';
 import { must, sb } from './supabase';
-import { notify } from './ui-state';
+import { ask, notify } from './ui-state';
 import { clearCache } from './cache';
 
 /** Estado compartilhado: sessão, cadastros e o formulário de lançamento (aberto de qualquer tela). */
@@ -102,6 +102,47 @@ export class Store {
                     ),
             },
         });
+    }
+
+    /** Excluir com Desfazer. Fixo/parcelado pergunta o alcance, como no Organizze: só este, este e os próximos, ou todos.
+     *  false = cancelou (a exclusão segue em segundo plano, a tela pode fechar na hora). */
+    async removeTx(t: Partial<Tx>): Promise<boolean> {
+        if (!t.id) return false;
+        const series = !t.transfer_id && (t.group_id || t.installments || t.recurring);
+        const scope = !series
+            ? 'one'
+            : await ask(
+                  `Excluir “${t.description?.trim()}”?`,
+                  [
+                      { value: 'one', label: 'Só este', icon: 'event' },
+                      { value: 'next', label: 'Este e os próximos', icon: 'arrow_forward' },
+                      { value: 'all', label: t.installments ? 'Todas as parcelas' : 'Todos os meses', icon: 'delete_sweep', danger: true },
+                  ],
+                  t.installments ? `Parcela ${t.installment} de ${t.installments}` : 'Lançamento fixo, repete todo mês',
+              );
+        if (!scope) return false;
+        let target: { column: 'id' | 'transfer_id'; value: string | string[] } = t.transfer_id
+            ? { column: 'transfer_id', value: t.transfer_id }
+            : { column: 'id', value: t.id };
+        if (scope !== 'one') {
+            // a série: pelo group_id; importados do Organizze não têm, então mesma descrição + conta/cartão + parcelas (ou fixo)
+            let q = sb.from('transactions').select('id');
+            q = t.group_id
+                ? q.eq('group_id', t.group_id)
+                : (t.installments ? q.eq('installments', t.installments) : q.eq('recurring', true))
+                      .eq('description', t.description!)
+                      .eq(t.card_id ? 'card_id' : 'account_id', (t.card_id ?? t.account_id)!);
+            if (scope === 'next') q = q.gte('date', t.date!);
+            target = { column: 'id', value: (await must(q)).map((r) => r.id as string) };
+        }
+        void this.withUndo(scope === 'one' ? 'Lançamento excluído' : 'Lançamentos excluídos', target, () =>
+            must(
+                Array.isArray(target.value)
+                    ? sb.from('transactions').delete().in('id', target.value)
+                    : sb.from('transactions').delete().eq(target.column, target.value),
+            ),
+        );
+        return true;
     }
 
     /** Alteração com "Desfazer": guarda as linhas antes, aplica, oferece restaurar. */

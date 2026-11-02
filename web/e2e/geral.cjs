@@ -281,9 +281,9 @@ async function login(page, pass = PASSWORD) {
     await mp.locator('.drawer button[aria-label=Fechar]').tap();
     await mp.locator('.tabbar button', { hasText: 'Mais' }).tap();
     await mp.waitForTimeout(400);
-    ok('mobile: menu Mais', await mp.locator('#more-menu').isVisible());
+    ok('mobile: menu Mais', await mp.locator('.more-sheet').isVisible());
     await mp.screenshot({ path: `${OUT}/m-mais.png` });
-    await mp.locator('#more-menu a', { hasText: 'Limites' }).tap();
+    await mp.locator('.more-sheet .more-grid button', { hasText: 'Limites' }).tap();
     await mp.waitForURL(/limites/); await mp.waitForTimeout(800);
     await mp.locator('.tabbar a', { hasText: 'Lançamentos' }).tap();
     await mp.waitForTimeout(1200);

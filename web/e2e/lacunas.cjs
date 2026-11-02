@@ -62,7 +62,9 @@ const nb = (s) => s.replace(/\s/g, ' ');
   const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 5000 }).catch(() => null), page.locator('.att button').first().click()]);
   ok('anexo abre por link assinado', !!popup && popup.url().includes('/storage/v1/object/sign/anexos/'), popup?.url().slice(0, 80));
   await popup?.close();
-  await page.locator('.drawer').getByRole('button', { name: /próximos/ }).click(); await page.waitForTimeout(1500);
+  await page.locator('.drawer').getByRole('button', { name: 'Excluir' }).click();
+  await page.locator('.ask-sheet .sheet-row', { hasText: 'Este e os próximos' }).click(); await page.waitForTimeout(1500);
+  ok('excluir parcelado pergunta e apaga a série', (await page.locator('.panel .item', { hasText: 'Teste parcelas' }).count()) === 0);
   // tags em ajustes: renomear e apagar
   await page.goto(URL + '/ajustes'); await page.waitForTimeout(1500);
   const tags = page.locator('section.panel', { hasText: 'Tags' });

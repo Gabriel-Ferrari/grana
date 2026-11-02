@@ -10,7 +10,9 @@
         </script>
         <link rel="icon" type="image/svg+xml" href="/icon.svg" />
         <link rel="manifest" href="/manifest.webmanifest" />
-        <meta name="theme-color" content="#183a2c" />
+        <!-- barra de status do celular na cor do fundo do app (claro/escuro); setTheme() troca quando o tema é fixado -->
+        <meta name="theme-color" content="#f7f7f0" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0a110e" media="(prefers-color-scheme: dark)" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <style>
             .boot {

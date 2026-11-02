@@ -11,6 +11,7 @@ type Inv = Invoice & { due: number; running_due: number };
 
 @Component({
     imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, Icon, Meter, BankLogo],
+    host: { class: 'cards-page' },
     template: `
         <div class="page-title reveal"><h1>Cartões</h1></div>
 
@@ -88,7 +89,7 @@ type Inv = Invoice & { due: number; running_due: number };
                             ></i
                             >{{ short(i.invoice_date) }}</span
                         >
-                        <b>{{ i.total | brl }}</b>
+                        <b [class.neg]="!i.is_paid && i.total > 0">{{ 0 - i.total | brl }}</b>
                     </button>
                 }
             </div>
@@ -106,9 +107,17 @@ type Inv = Invoice & { due: number; running_due: number };
                             </p>
                         </div>
                         <div style="text-align:right">
-                            <div class="big" style="font-size:1.5rem;font-weight:750">{{ i.total | brl }}</div>
+                            <div
+                                class="big"
+                                style="font-size:1.5rem;font-weight:750;white-space:nowrap"
+                                [class.neg]="!i.is_paid && i.total > 0"
+                            >
+                                {{ 0 - i.total | brl }}
+                            </div>
                             @if (i.due !== i.total) {
-                                <span class="muted small">a pagar {{ i.due | brl }}</span>
+                                <span class="muted small"
+                                    >a pagar <b class="neg">{{ 0 - i.due | brl }}</b></span
+                                >
                             }
                         </div>
                     </div>
@@ -169,32 +178,39 @@ type Inv = Invoice & { due: number; running_due: number };
                         </form>
                     }
 
-                    <div class="list" [class.loading]="loadingTx()">
-                        @for (t of txs(); track t.id) {
-                            <div class="item click" (click)="store.open(t)" (keydown.enter)="store.open(t)" tabindex="0">
-                                <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
-                                    ><span class="ms">{{ icon(t) }}</span></span
-                                >
-                                <div class="grow">
-                                    <div class="title">
-                                        {{ t.description }}
-                                        @if (t.installments) {
-                                            <span class="tag">{{ t.installment }}/{{ t.installments }}</span>
-                                        }
+                    <!-- compras agrupadas por dia, lista corrida como em Lançamentos (Organizze) -->
+                    @for (g of txDays(); track g.date) {
+                        <div class="day">
+                            <span>{{ g.label }}</span
+                            ><span class="num">{{ g.sum | brl }}</span>
+                        </div>
+                        <div class="list" [class.loading]="loadingTx()">
+                            @for (t of g.items; track t.id) {
+                                <div class="item click" (click)="store.open(t)" (keydown.enter)="store.open(t)" tabindex="0">
+                                    <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
+                                        ><span class="ms">{{ icon(t) }}</span></span
+                                    >
+                                    <div class="grow">
+                                        <div class="title">
+                                            {{ t.description }}
+                                            @if (t.installments) {
+                                                <span class="tag">{{ t.installment }}/{{ t.installments }}</span>
+                                            }
+                                        </div>
+                                        <div class="sub">
+                                            {{ store.catById().get(t.category_id ?? '')?.name ?? 'Sem categoria' }}
+                                        </div>
                                     </div>
-                                    <div class="sub">
-                                        {{ t.date | dmy: true }} · {{ store.catById().get(t.category_id ?? '')?.name ?? 'Sem categoria' }}
-                                    </div>
+                                    <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0">{{ t.amount | brl }}</span>
                                 </div>
-                                <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0">{{ t.amount | brl }}</span>
-                            </div>
-                        } @empty {
-                            <div class="empty-state">
-                                <g-icon name="receipt_long" />
-                                <div><b>Fatura vazia</b>Compras feitas até o dia {{ c.closing_day }} entram aqui.</div>
-                            </div>
-                        }
-                    </div>
+                            }
+                        </div>
+                    } @empty {
+                        <div class="empty-state">
+                            <g-icon name="receipt_long" />
+                            <div><b>Fatura vazia</b>Compras feitas até o dia {{ c.closing_day }} entram aqui.</div>
+                        </div>
+                    }
                 </section>
             }
         }
@@ -214,6 +230,16 @@ export class Cards {
         () => this.invoices().find((i) => i.invoice_date === (this.inv() || this.card()?.current_invoice_date)) ?? this.invoices()[0],
     );
     txs = signal<Tx[]>([]);
+    txDays = computed(() => {
+        const m = new Map<string, Tx[]>();
+        for (const t of this.txs()) m.set(t.date, [...(m.get(t.date) ?? []), t]);
+        return [...m].map(([date, items]) => ({
+            date,
+            items,
+            sum: items.reduce((s, t) => s + t.amount, 0),
+            label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' }),
+        }));
+    });
     payments = signal<Tx[]>([]);
     /** dívida (+) ou crédito (−) que veio das faturas anteriores: running_due = anterior + gastos − pagamentos */
     carry = (i: Inv) => i.running_due - i.total + i.paid;

@@ -1,8 +1,9 @@
-import { Component, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, DestroyRef, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Store, Tx, addMonths, brl, catIcon, invoiceDue, must, notify, sb, today, suggestPrefs } from '../../core';
+import { Store, Tx, addMonths, brl, catIcon, invoiceDue, must, notify, offerPush, onBack, sb, today, suggestPrefs } from '../../core';
 import { ChipOption, ChipSelect, DatePick, Keypad, Money } from '../../shared/ui/fields';
 import { Icon } from '../../shared/ui/icon';
+import { SheetDrag } from '../../shared/ui/sheet';
 
 export type TxKind = 'expense' | 'income' | 'transfer';
 /** Pré-preenchimento: lançamento existente (edição) ou parcial (novo / vindo de notificação). */
@@ -10,11 +11,20 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
 
 @Component({
     selector: 'tx-form',
-    imports: [FormsModule, Icon, Money, DatePick, Keypad, ChipSelect],
+    imports: [FormsModule, Icon, Money, DatePick, Keypad, ChipSelect, SheetDrag],
     template: `
         <div class="scrim" (click)="closed.emit(null)" (keydown.escape)="closed.emit(null)" tabindex="-1"></div>
-        <form class="drawer tx" [attr.data-kind]="kind()" (ngSubmit)="save()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
-            <div class="tx-head">
+        <form
+            #sheet
+            class="drawer tx"
+            [attr.data-kind]="kind()"
+            (ngSubmit)="save()"
+            role="dialog"
+            aria-modal="true"
+            [attr.aria-label]="title()"
+        >
+            <!-- celular: arrastar o cabeçalho para baixo fecha (como folha nativa) -->
+            <div class="tx-head" [gSheetDrag]="sheet" (dismissed)="closed.emit(null)">
                 <div class="row between">
                     @if (!draft().id) {
                         <div class="tx-tabs" role="tablist" aria-label="Tipo">
@@ -125,6 +135,8 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                             placeholder="Sem categoria"
                             [options]="catOptions()"
                             [(value)]="f.category_id"
+                            createLabel="Nova categoria"
+                            (create)="newCat($event)"
                         />
                     </div>
                     <div class="tx-row">
@@ -305,7 +317,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             </div>
 
             @if (keypad()) {
-                <div class="keypad-sheet">
+                <div class="keypad-sheet" gSheetDrag (dismissed)="keypad.set(false)">
                     <span class="grabber"></span>
                     <g-keypad
                         (key)="$event < 0 ? money()?.back() : money()?.press($event)"
@@ -318,20 +330,9 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             <footer>
                 <div class="row">
                     @if (draft().id) {
-                        <button type="button" class="btn ghost icon danger" (click)="remove(false)" aria-label="Excluir" title="Excluir">
+                        <button type="button" class="btn ghost icon danger" (click)="remove()" aria-label="Excluir" title="Excluir">
                             <g-icon name="delete" [size]="22" />
                         </button>
-                        @if (draft().group_id) {
-                            <button
-                                type="button"
-                                class="btn ghost icon danger"
-                                (click)="remove(true)"
-                                aria-label="Excluir este e os próximos"
-                                title="Excluir este e os próximos"
-                            >
-                                <g-icon name="delete_sweep" [size]="22" />
-                            </button>
-                        }
                         @if (kind() !== 'transfer') {
                             <button
                                 type="button"
@@ -347,17 +348,11 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                 </div>
                 <div class="row">
                     @if (!draft().id) {
-                        <button
-                            type="button"
-                            class="btn ghost"
-                            [disabled]="busy() || !f.cents"
-                            (click)="save(true)"
-                            title="Salvar e lançar outro"
-                        >
+                        <button type="button" class="btn ghost" [disabled]="busy()" (click)="save(true)" title="Salvar e lançar outro">
                             + Outro
                         </button>
                     }
-                    <button class="btn save" [disabled]="busy() || (!f.cents && !calc())"><g-icon name="check" [size]="22" />Salvar</button>
+                    <button class="btn save" [disabled]="busy()"><g-icon name="check" [size]="22" />Salvar</button>
                 </div>
             </footer>
         </form>
@@ -446,6 +441,30 @@ export class TxForm implements OnInit {
         afterNextRender(() => {
             if (!this.mobile) this.money()?.focus();
         });
+        // voltar do Android: fecha o teclado do valor primeiro, depois o formulário
+        const arm = (): (() => void) =>
+            (this.unback = onBack(() => {
+                if (!this.keypad()) return this.closed.emit(null);
+                this.keypad.set(false);
+                arm();
+            }));
+        arm();
+        inject(DestroyRef).onDestroy(() => this.unback());
+    }
+    private unback = () => {};
+
+    /** categoria nova direto na lista (Organizze): cria com o nome e já seleciona; cor e ícone se ajustam em Ajustes */
+    async newCat(name: string) {
+        const c = await must(
+            sb
+                .from('categories')
+                .insert({ name, kind: this.kind() === 'income' ? 'income' : 'expense', color: '#1f6f4a' })
+                .select('id')
+                .single(),
+        );
+        await this.store.load();
+        this.f.category_id = c.id;
+        notify(`Categoria ${name} criada`);
     }
 
     // métodos (não computed): dependem de campos do formulário, que não são signals
@@ -665,7 +684,12 @@ export class TxForm implements OnInit {
     async save(another = false) {
         if (this.calc()) this.onOp('=');
         const total = this.f.cents;
-        if (total <= 0 || !this.f.origin) return;
+        if (total <= 0) {
+            if (this.mobile) this.keypad.set(true);
+            else this.money()?.focus();
+            return notify('Digite o valor', { tone: 'error' });
+        }
+        if (!this.f.origin) return;
         this.busy.set(true);
         try {
             const d = this.draft();
@@ -750,7 +774,10 @@ export class TxForm implements OnInit {
                 }
             }
             await this.store.load();
-            notify(d.id ? 'Alterações salvas' : this.kind() === 'transfer' ? 'Transferência registrada' : 'Lançamento salvo');
+            // conta a pagar/receber: momento natural de oferecer o aviso no vencimento
+            const bill = !d.id && this.kind() !== 'transfer' && !!account_id && (!this.f.paid || this.f.repeat === 'fixo');
+            if (!(bill && offerPush('Salvo. Quer um aviso no dia do vencimento?')))
+                notify(d.id ? 'Alterações salvas' : this.kind() === 'transfer' ? 'Transferência registrada' : 'Lançamento salvo');
             if (d.id && this.kind() !== 'transfer' && this.f.category_id && this.f.category_id !== d.category_id)
                 void this.store.offerSameDesc({ id: d.id, description: this.f.description }, this.f.category_id);
             if (another) {
@@ -787,19 +814,9 @@ export class TxForm implements OnInit {
         setTimeout(() => this.store.open(draft));
     }
 
-    async remove(following: boolean) {
+    async remove() {
         const d = this.draft();
         if (!d.id) return;
-        const target = d.transfer_id
-            ? { column: 'transfer_id' as const, value: d.transfer_id }
-            : following && d.group_id
-              ? { column: 'group_id' as const, value: d.group_id, fromDate: d.date! }
-              : { column: 'id' as const, value: d.id };
-        this.closed.emit(null);
-        await this.store.withUndo(following ? 'Lançamentos excluídos' : 'Lançamento excluído', target, () => {
-            let q = sb.from('transactions').delete().eq(target.column, target.value);
-            if ('fromDate' in target && target.fromDate) q = q.gte('date', target.fromDate);
-            return must(q);
-        });
+        if (await this.store.removeTx(d)) this.closed.emit(null);
     }
 }

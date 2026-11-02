@@ -2,7 +2,21 @@ import { Component, computed, effect, inject, signal, untracked } from '@angular
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Meter } from '../../shared/ui/charts';
-import { BrlPipe, Store, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, notify, sb, toCents, today } from '../../core';
+import {
+    BrlPipe,
+    Store,
+    addMonths,
+    catIcon,
+    monthEnd,
+    monthLabel,
+    monthStart,
+    must,
+    notify,
+    offerPush,
+    sb,
+    toCents,
+    today,
+} from '../../core';
 import { Icon } from '../../shared/ui/icon';
 
 @Component({
@@ -197,7 +211,7 @@ export class Budgets {
         );
         this.newCat = '';
         this.newValue = null;
-        notify('Limite definido');
+        if (!offerPush('Limite definido. Quer aviso quando chegar perto?')) notify('Limite definido');
         this.fetch(this.month());
     }
 

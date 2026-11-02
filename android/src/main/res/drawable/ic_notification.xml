@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone pequeno das notificações (status bar): o mesmo "g" do launcher, branco (o Android usa só a transparência), ampliado. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:pivotX="54"
+        android:pivotY="54"
+        android:scaleX="1.7"
+        android:scaleY="1.7"
+        android:translateX="0"
+        android:translateY="3">
+        <path
+            android:pathData="M39,50a11,11 0 1,0 22,0a11,11 0 1,0 -22,0"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6.5" />
+        <path
+            android:pathData="M61,39V63"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="6.5" />
+        <path
+            android:pathData="M61,63A11,11 0 0,1 40.03,67.65"
+            android:strokeColor="#FFFFFF"
+            android:strokeLineCap="round"
+            android:strokeWidth="6.5" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M57.75,39.5C57.75,30 63,24.5 73.5,23.5C73,33 68.5,38 64.25,39.5Z" />
+    </group>
+</vector>

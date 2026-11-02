@@ -5,6 +5,11 @@
     <string name="shortcut_coletor">Configurar coletor</string>
     <color name="grana_green">#1f6f4a</color>
     <color name="grana_bg">#f6f7f1</color>
+    <!-- barras do sistema na cor do app (tema claro/escuro do celular): status = fundo, navegação = barra de abas -->
+    <color name="grana_status">#f7f7f0</color>
+    <color name="grana_status_dark">#0a110e</color>
+    <color name="grana_nav">#fdfdfa</color>
+    <color name="grana_nav_dark">#111916</color>
     <!-- App -> site. O lado site -> app (que tira a barra de URL da TWA) é web/public/.well-known/assetlinks.json. -->
     <string name="asset_statements" translatable="false">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://grana.ferrari-gabriel2002.workers.dev\"}}]</string>
     <color name="grana_splash">#183A2C</color>

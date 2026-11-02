@@ -3079,27 +3079,38 @@ body:has(.sel-bar) .toast {
         font-size: 0.92rem;
         letter-spacing: -0.02em;
     }
+    /* itens grandes como no Organizze: ícone redondo de 42px, título e valor em 1rem */
     .item {
-        gap: 0.6rem;
-        padding: 0.7rem 0.35rem;
+        gap: 0.8rem;
+        padding: 0.8rem 0.45rem;
+        min-height: 66px;
+    }
+    .item .title {
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .item .sub {
+        font-size: 0.84rem;
+        margin-top: 0.1rem;
     }
     .item .amt {
-        font-size: 0.9rem;
+        font-size: 1rem;
     }
     .item .cat-ico {
-        width: 32px;
-        height: 32px;
-        border-radius: 10px;
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        font-size: 22px;
     }
     .item + .item::before {
-        left: calc(0.35rem + 32px + 0.6rem);
+        left: calc(0.45rem + 42px + 0.8rem);
     }
     .paid-btn {
-        width: 28px;
-        height: 32px;
+        width: 34px;
+        height: 40px;
     }
     .item > span[style*='width:30px'] {
-        width: 28px !important;
+        width: 34px !important;
     }
 }
 /* toque longo seleciona o lançamento, não o texto */
@@ -3771,6 +3782,10 @@ body:has(.sel-bar) .toast {
     .drawer.tx footer .btn.save .ms {
         font-size: 32px !important;
     }
+    /* o texto "Salvar" fica escondido (font-size 0): sem gap o ✓ fica no centro */
+    .drawer.tx footer .btn.save {
+        gap: 0;
+    }
     /* "+ Outro": pílula pequena ao lado do ✓, sem tirar o ✓ do centro */
     .drawer.tx footer .row:last-child .btn.ghost {
         position: absolute;
@@ -3825,4 +3840,449 @@ body:has(.sel-bar) .toast {
 .chip:active {
     transform: scale(0.96);
     transition: transform 0.06s;
+}
+
+/* ───────── celular nativo (Organizze): tudo maior, folhas que arrastam, rodapé de totais ───────── */
+@media (max-width: 560px) {
+    html {
+        font-size: 17px;
+    }
+    body {
+        font-size: 16px;
+    }
+}
+@media (max-width: 860px) {
+    :root {
+        --tabbar-h: 4.25rem;
+    }
+    /* puxadores: o dedo arrasta a folha, não rola a página */
+    .sheet-drag {
+        touch-action: none;
+    }
+    /* sem cabeçalho no celular (Organizze): tudo está na barra de baixo; olho na Início, tema e conta no Mais */
+    .top {
+        display: none;
+    }
+    main {
+        padding-top: 1rem;
+    }
+    .btn {
+        min-height: 44px;
+    }
+    .btn.icon {
+        min-width: 44px;
+    }
+}
+
+/* salvar nunca fica transparente (sem valor, o toque pede o valor) */
+.drawer.tx footer .btn:disabled {
+    opacity: 1;
+}
+
+/* criar categoria na lista */
+.fopt.fnew {
+    color: var(--brand);
+}
+.fopt.fnew .cat-ico {
+    --cc: var(--brand);
+}
+.fcreate {
+    display: flex;
+    gap: 0.5rem;
+    padding: 0.5rem 0.4rem;
+}
+.fcreate input {
+    flex: 1;
+    min-width: 0;
+}
+
+/* folha de baixo genérica (Mais, perguntas) */
+.grabber {
+    display: block;
+    width: 44px;
+    height: 5px;
+    border-radius: 3px;
+    background: var(--line);
+    margin: 0 auto;
+}
+.sheet-grab {
+    padding: 0.7rem 0 0.9rem;
+}
+.sheet {
+    position: fixed;
+    z-index: 71;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-height: 90dvh;
+    overflow: auto;
+    padding: 0 1rem calc(1rem + env(safe-area-inset-bottom));
+    background: var(--surface);
+    color: var(--ink);
+    border-radius: 26px 26px 0 0;
+    box-shadow: 0 -20px 60px -20px oklch(20% 0.05 160 / 0.45);
+    animation: sheet-up 0.24s var(--ease);
+}
+@media (min-width: 861px) {
+    .sheet {
+        left: 50%;
+        right: auto;
+        bottom: auto;
+        top: 50%;
+        width: min(420px, 92vw);
+        transform: translate(-50%, -50%);
+        border-radius: 24px;
+        animation: fade 0.2s;
+    }
+}
+.ask-scrim {
+    z-index: 70;
+}
+.ask-title {
+    display: block;
+    font-size: 1.15rem;
+    padding: 0 0.4rem;
+}
+.ask-text {
+    margin: 0.25rem 0.4rem 0.6rem;
+}
+.sheet-row {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    width: 100%;
+    min-height: 56px;
+    padding: 0 0.6rem;
+    border: 0;
+    border-radius: 14px;
+    background: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 1.05rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+}
+.sheet-row:active,
+.sheet-row:hover {
+    background: var(--sunk);
+}
+.sheet-row.danger {
+    color: var(--danger);
+}
+.sheet-row.cancel {
+    justify-content: center;
+    margin-top: 0.4rem;
+    background: var(--sunk);
+}
+.sheet-row .seg {
+    margin-left: auto;
+}
+.more-user {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0 0.4rem 1rem;
+}
+.more-user .avatar {
+    width: 52px;
+    height: 52px;
+    display: grid;
+    place-items: center;
+}
+.more-user b,
+.more-user small {
+    display: block;
+}
+.more-user b {
+    font-size: 1.15rem;
+}
+.more-user small {
+    color: var(--muted);
+}
+.more-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.6rem;
+    margin-bottom: 0.6rem;
+}
+.more-grid button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    min-height: 96px;
+    padding: 0.9rem 0.3rem 0.8rem;
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    background: var(--paper);
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.9rem;
+    font-weight: 650;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+.more-grid button:active {
+    transform: scale(0.96);
+    background: var(--sunk);
+}
+.more-grid button.on {
+    border-color: var(--brand);
+}
+.more-ico {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: color-mix(in oklch, var(--lime) 40%, var(--surface));
+    color: var(--on-lime);
+}
+.more-ico .badge {
+    position: absolute;
+    top: -4px;
+    right: -8px;
+}
+
+/* lançamentos no celular: mês fixo no topo numa linha só, lista corrida (sem card), totais no rodapé */
+.tx-foot {
+    display: none;
+}
+@media (max-width: 860px) {
+    .tx-toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 15;
+        margin: -0.4rem calc(-1 * clamp(1.1rem, 3.2vw, 2.2rem)) 0;
+        padding: 0.4rem clamp(1.1rem, 3.2vw, 2.2rem);
+        background: var(--paper);
+        gap: 0.4rem;
+    }
+    .tx-toolbar > .row:first-child {
+        flex: 1 1 15rem;
+        min-width: 0;
+        flex-wrap: nowrap !important;
+    }
+    .tx-toolbar > .row:first-child:has(input[type='date']) {
+        flex-wrap: wrap !important;
+    }
+    .tx-toolbar > .row:last-child:has(.search) {
+        flex: 1 1 100%;
+    }
+    .tx-toolbar .search.grow-in {
+        flex: 1;
+        min-width: 0;
+    }
+    .tx-toolbar .month-pill {
+        flex: 1 1 0;
+        min-width: 0;
+        justify-content: space-between;
+        box-shadow: none;
+    }
+    .tx-toolbar .month-pill b {
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    /* período: só o ícone, para caber na linha do mês */
+    .tx-toolbar .fchip > span:not(.ms) {
+        display: none;
+    }
+    .tx-toolbar .fchip {
+        height: 46px;
+        padding: 0 0.45rem 0 0.7rem;
+        gap: 0;
+    }
+    .tx-toolbar .fchip.on {
+        background: var(--surface);
+        color: var(--ink);
+        border-color: var(--line);
+    }
+    .tx-toolbar .fchip-ico {
+        font-size: 22px;
+    }
+    .panel.tx-list {
+        margin: 0 calc(-1 * clamp(1.1rem, 3.2vw, 2.2rem));
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        background: none;
+        box-shadow: none;
+    }
+    .tx-list .day {
+        padding: 1rem 1.1rem 0.4rem;
+        font-size: 0.85rem;
+    }
+    .tx-list .list {
+        margin: 0;
+        background: var(--surface);
+        border-block: 1px solid var(--line);
+    }
+    .tx-list .item {
+        border-radius: 0;
+        padding-inline: 1rem 0.6rem;
+    }
+    .tx-list .item + .item::before {
+        left: calc(1rem + 42px + 0.8rem);
+        right: 0;
+    }
+    .tx-list .empty-state {
+        padding: 1.2rem 1.1rem;
+    }
+    .tx-foot {
+        display: block;
+        position: fixed;
+        z-index: 19;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
+        background: var(--surface);
+        border-top: 1px solid var(--line);
+        box-shadow: 0 -10px 30px -18px oklch(20% 0.05 160 / 0.5);
+    }
+    .tx-foot-main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        column-gap: 5.6rem; /* vão do + da barra */
+        align-items: center;
+        width: 100%;
+        padding: 0.75rem 1.1rem;
+        border: 0;
+        background: none;
+        color: var(--ink);
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .tx-foot-main > span {
+        font-weight: 650;
+        color: var(--muted);
+    }
+    .tx-foot-main > b {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.2rem;
+    }
+    .tx-foot-main > b .ms {
+        color: var(--muted);
+    }
+    .tx-foot-more span {
+        font-size: 0.9rem;
+        color: var(--muted);
+        font-weight: 600;
+    }
+    .tx-foot b {
+        display: block;
+        font-size: 1.05rem;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+    .tx-foot-more {
+        display: flex;
+        flex-direction: column;
+        gap: 0.1rem;
+        padding: 0.7rem 1.1rem 0.2rem;
+        animation: rise 0.18s var(--ease);
+    }
+    .tx-foot-more div {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--line);
+    }
+    main:has(.tx-foot) {
+        padding-bottom: 12rem;
+    }
+    body:has(.tx-foot) .toast {
+        margin-bottom: 3.6rem;
+    }
+}
+
+/* convite para ligar avisos, no fim do painel A pagar */
+.push-ask {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    width: 100%;
+    margin-top: 0.6rem;
+    padding: 0.75rem 0.8rem;
+    border: 1px dashed color-mix(in oklch, var(--brand) 50%, var(--line));
+    border-radius: 14px;
+    background: color-mix(in oklch, var(--lime) 14%, var(--surface));
+    color: var(--ink);
+    font: inherit;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+/* celular: total desce de linha e o resumo de relatórios vira tabela (valores grandes não vazam do card) */
+@media (max-width: 560px) {
+    /* título e valor grande do painel: se não couber, o valor desce de linha (não vaza) */
+    .panel-head {
+        flex-wrap: wrap;
+    }
+    .rep-total {
+        margin-left: auto;
+    }
+    .rep-sum {
+        grid-template-columns: 1fr;
+        gap: 0;
+    }
+    .rep-sum > div {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 0.4rem 0;
+        border-bottom: 1px solid var(--line);
+    }
+    .rep-sum span {
+        font-size: 0.85rem;
+    }
+}
+
+/* cartões no celular: sem cards em volta (Organizze), compras em lista corrida de ponta a ponta como em Lançamentos */
+@media (max-width: 860px) {
+    .cards-page > .panel {
+        margin: 0 calc(-1 * clamp(1.1rem, 3.2vw, 2.2rem));
+        padding: 0.2rem clamp(1.1rem, 3.2vw, 2.2rem);
+        background: none;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+    .cards-page > .panel .list {
+        margin: 0 calc(-1 * clamp(1.1rem, 3.2vw, 2.2rem));
+        background: var(--surface);
+        border-block: 1px solid var(--line);
+    }
+    .cards-page > .panel .item {
+        border-radius: 0;
+        padding-inline: 1rem 0.8rem;
+    }
+    .cards-page > .panel .item + .item::before {
+        left: calc(1rem + 42px + 0.8rem);
+        right: 0;
+    }
+    .cards-page .day {
+        padding: 1rem 0 0.4rem;
+        font-size: 0.85rem;
+    }
+    /* total da fatura desce para baixo do título: alinha à esquerda junto com o "a pagar" */
+    .cards-page .panel-head > div[style*='text-align'] {
+        text-align: left !important;
+    }
+    /* pagar fatura: botão grande na largura toda */
+    .cards-page form .btn.lime {
+        flex: 1 1 100%;
+        min-height: 52px;
+        font-size: 1.05rem;
+    }
 }

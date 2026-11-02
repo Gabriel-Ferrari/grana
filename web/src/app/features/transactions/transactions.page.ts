@@ -109,7 +109,7 @@ type Inv = Invoice & { due: number; running_due: number };
         </div>
 
         @if (isCash()) {
-            <section class="sum-strip reveal">
+            <section class="sum-strip reveal hide-m">
                 <div>
                     <span>Saldo hoje</span><b [class.neg]="cashBox().now < 0">{{ cashBox().now | brl }}</b>
                 </div>
@@ -122,7 +122,7 @@ type Inv = Invoice & { due: number; running_due: number };
                 </div>
             </section>
         } @else {
-            <section class="sum-strip reveal">
+            <section class="sum-strip reveal hide-m">
                 <div>
                     <span>Entradas</span><b class="pos">{{ totals().inc | brl }}</b>
                 </div>
@@ -135,7 +135,7 @@ type Inv = Invoice & { due: number; running_due: number };
             </section>
         }
 
-        <section class="panel reveal" [class.loading]="loading()">
+        <section class="panel tx-list reveal" [class.loading]="loading()">
             @for (g of groups(); track g.date) {
                 <div class="day">
                     <span>{{ g.label }}</span
@@ -243,6 +243,43 @@ type Inv = Invoice & { due: number; running_due: number };
                 </div>
             }
         </section>
+
+        @if (!sel().size) {
+            <!-- celular: total no rodapé (Organizze); toque abre quanto entrou e saiu -->
+            <footer class="tx-foot" [class.open]="footOpen()">
+                @if (footOpen()) {
+                    <div class="tx-foot-more">
+                        <div>
+                            <span>Entradas</span><b class="pos">{{ totals().inc | brl }}</b>
+                        </div>
+                        <div>
+                            <span>Saídas</span><b class="neg">{{ totals().exp | brl }}</b>
+                        </div>
+                        @if (isCash()) {
+                            <div>
+                                <span>Saldo hoje</span><b [class.neg]="cashBox().now < 0">{{ cashBox().now | brl }}</b>
+                            </div>
+                            <div>
+                                <span>Previsto em {{ endLabel() }}</span
+                                ><b [class.neg]="cashBox().end < 0">{{ cashBox().end | brl }}</b>
+                            </div>
+                        }
+                    </div>
+                }
+                <button
+                    type="button"
+                    class="tx-foot-main"
+                    (click)="footOpen.set(!footOpen())"
+                    [attr.aria-expanded]="footOpen()"
+                    aria-label="Total do período: toque para ver entradas e saídas"
+                >
+                    <span>Total</span>
+                    <b [class.neg]="totals().inc + totals().exp < 0" [class.pos]="totals().inc + totals().exp > 0"
+                        >{{ totals().inc + totals().exp | brl }} <g-icon [name]="footOpen() ? 'expand_more' : 'expand_less'" [size]="20"
+                    /></b>
+                </button>
+            </footer>
+        }
 
         @if (sel().size) {
             <div class="sel-bar" role="toolbar" aria-label="Ações nos selecionados">
@@ -378,7 +415,9 @@ export class Transactions {
     label = computed(() => {
         const r = this.range(),
             f = (d: string) => new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' });
-        if (!r.custom) return monthLabel(this.month());
+        // ano corrente: só o mês, como no Organizze (cabe na linha do celular)
+        if (!r.custom)
+            return this.month().slice(0, 4) === today().slice(0, 4) ? monthLabel(this.month()).split(' ')[0] : monthLabel(this.month());
         const p = this.periodOptions.find((o) => o.value === this.period() && o.value !== 'custom');
         return p ? p.label : r.from === r.to ? f(r.from) : `${f(r.from)} – ${f(r.to)}`;
     });
@@ -504,10 +543,7 @@ export class Transactions {
         this.justSwiped = true;
         setTimeout(() => (this.justSwiped = false), 350);
         if (dx > 90 && t.account_id) await this.togglePaid(t);
-        else if (dx < -90)
-            await this.store.withUndo(`${t.description} excluído`, { column: 'id', value: t.id }, () =>
-                must(sb.from('transactions').delete().eq('id', t.id)),
-            );
+        else if (dx < -90) await this.store.removeTx(t);
     }
     swipeCancel() {
         this.sw = null;
@@ -632,11 +668,13 @@ export class Transactions {
             label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' }),
         }));
     });
+    footOpen = signal(false);
+    /** no Caixa o pagamento de fatura é saída de verdade (soma igual ao resultado do mês) */
     totals = computed(() => {
         let inc = 0,
             exp = 0;
         for (const t of this.filtered()) {
-            if (t.transfer_id || t.pays_card_id) continue;
+            if (t.transfer_id || (t.pays_card_id && !this.isCash())) continue;
             if (t.amount > 0) inc += t.amount;
             else exp += t.amount;
         }

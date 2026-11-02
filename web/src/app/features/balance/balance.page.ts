@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
-import { BrlPipe, Store, addMonths, monthEnd, monthLabel, monthStart, must, sb, today, swr, cached } from '../../core';
-import { BalanceLine, Flow, FlowMonth } from '../../shared/ui/charts';
+import { BrlPipe, DmyPipe, Store, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today, swr, cached } from '../../core';
+import { BalanceLine, Donut, Flow, FlowMonth, RankItem } from '../../shared/ui/charts';
 import { Icon } from '../../shared/ui/icon';
 
 interface Day {
@@ -15,10 +15,15 @@ interface Month {
     income: number;
     expense: number;
 }
+interface CatRow {
+    category_id: string | null;
+    income: number;
+    expense: number;
+}
 
-/** Balanço do mês (e dos últimos meses): o que entrou, saiu e como ficou o saldo nas contas. */
+/** Balanço do mês (como o Relatórios do Organizze): entradas x saídas, onde mais gastou, saldo nas contas e últimos meses. */
 @Component({
-    imports: [BrlPipe, Icon, Flow, BalanceLine],
+    imports: [BrlPipe, DmyPipe, Icon, Flow, BalanceLine, Donut],
     template: `
         <div class="page-title reveal">
             <h1>Balanço</h1>
@@ -29,19 +34,65 @@ interface Month {
             </div>
         </div>
 
-        <section class="sum-strip reveal" [class.loading]="loading()">
-            <div>
-                <span>Entradas</span><b class="pos">{{ cur().income | brl }}</b>
+        <section class="panel reveal" [class.loading]="loading()">
+            <div class="panel-head">
+                <h2>Entradas x Saídas</h2>
+                <span class="muted small">{{ month() | dmy: true }} a {{ lastDay() | dmy: true }}</span>
             </div>
-            <div>
-                <span>Saídas</span><b class="neg">{{ -cur().expense | brl }}</b>
+            <div class="io">
+                <div class="io-bars" aria-hidden="true">
+                    <span [style.height.%]="barPct(cur().income)" style="background:var(--in)"></span>
+                    <span [style.height.%]="barPct(cur().expense)" style="background:var(--out)"></span>
+                </div>
+                <div class="io-rows">
+                    <div>
+                        <span>Entradas</span><b class="pos">{{ cur().income | brl }}</b>
+                    </div>
+                    <div>
+                        <span>Saídas</span><b class="neg">{{ -cur().expense | brl }}</b>
+                    </div>
+                    <div class="res">
+                        <span>Resultado</span
+                        ><b [class.neg]="cur().income - cur().expense < 0" [class.pos]="cur().income - cur().expense > 0">{{
+                            cur().income - cur().expense | brl
+                        }}</b>
+                    </div>
+                </div>
             </div>
-            <div>
-                <span>Resultado</span
-                ><b [class.neg]="cur().income - cur().expense < 0" [class.pos]="cur().income - cur().expense > 0">{{
-                    cur().income - cur().expense | brl
-                }}</b>
+        </section>
+
+        <section class="panel reveal" [class.loading]="loading()">
+            <div class="panel-head cat-head">
+                <h2>{{ kind() === 'exp' ? 'Onde você mais gastou' : 'De onde veio o dinheiro' }}</h2>
+                <div class="seg small" role="group" aria-label="Tipo">
+                    <button [class.on]="kind() === 'exp'" (click)="kind.set('exp')">Despesas</button>
+                    <button [class.on]="kind() === 'inc'" (click)="kind.set('inc')">Receitas</button>
+                </div>
             </div>
+            @if (catItems().length) {
+                <g-donut [items]="catItems()" [caption]="kind() === 'exp' ? 'Despesas' : 'Receitas'" (pick)="openCat($event)" />
+                <div class="list cat-list">
+                    @for (c of catItems(); track c.id) {
+                        <div class="item click" (click)="openCat(c.id)" (keydown.enter)="openCat(c.id)" tabindex="0">
+                            <span class="cat-ico" [style.--cc]="c.color"
+                                ><span class="ms">{{ c.icon }}</span></span
+                            >
+                            <div class="grow">
+                                <div class="title">{{ c.name }}</div>
+                            </div>
+                            <div class="cat-val">
+                                <b>{{ c.value | brl }}</b
+                                ><span>{{ pct(c.value) }}%</span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            } @else if (!loading()) {
+                <div class="empty-state">
+                    <g-icon name="donut_large" />
+                    <div><b>Nenhum lançamento no mês</b>Escolha outro mês ou adicione lançamentos.</div>
+                </div>
+            }
         </section>
 
         <section class="panel reveal" [class.loading]="loading()">
@@ -95,6 +146,62 @@ interface Month {
             </div>
         </section>
     `,
+    styles: [
+        `
+            .io {
+                display: flex;
+                align-items: flex-end;
+                gap: 1.2rem;
+            }
+            .io-bars {
+                display: flex;
+                align-items: flex-end;
+                gap: 6px;
+                height: 92px;
+                flex: none;
+            }
+            .io-bars span {
+                width: 28px;
+                min-height: 3px;
+                border-radius: 6px 6px 2px 2px;
+                transition: height 0.3s;
+            }
+            .io-rows {
+                flex: 1;
+                min-width: 0;
+                display: grid;
+                gap: 0.4rem;
+            }
+            .io-rows div {
+                display: flex;
+                justify-content: space-between;
+                align-items: baseline;
+                gap: 0.6rem;
+            }
+            .io-rows span {
+                font-size: 0.8rem;
+                font-weight: 650;
+                color: var(--muted);
+            }
+            .io-rows b {
+                white-space: nowrap;
+                font-variant-numeric: tabular-nums;
+            }
+            .io-rows .res {
+                padding-top: 0.4rem;
+                border-top: 1px solid var(--line);
+            }
+            /* título + Despesas/Receitas: no celular o seletor desce para a linha de baixo */
+            .cat-head {
+                flex-wrap: wrap;
+                row-gap: 0.5rem;
+            }
+            /* ícone redondo como no Organizze */
+            .cat-list .cat-ico {
+                border-radius: 50%;
+            }
+        `,
+    ],
 })
 export class Balance {
     store = inject(Store);
@@ -116,6 +223,30 @@ export class Balance {
         return d ? d.balance - d.income + d.expense : 0;
     });
     endBal = computed(() => this.days().at(-1)?.balance ?? 0);
+    lastDay = computed(() => monthEnd(this.month()));
+    /** barras de entradas x saídas: a maior ocupa a altura toda */
+    barPct = (v: number) => (v / (Math.max(this.cur().income, this.cur().expense) || 1)) * 100;
+    /** categorias do mês (já somadas na categoria-pai pelo banco), da maior para a menor, como no Organizze */
+    kind = signal<'exp' | 'inc'>('exp');
+    byCat = signal<CatRow[]>([]);
+    catItems = computed(() => {
+        const k = this.kind() === 'exp' ? 'expense' : 'income';
+        return this.byCat()
+            .map((c): RankItem => {
+                const cat = this.store.catById().get(c.category_id ?? '');
+                return {
+                    id: c.category_id ?? 'none',
+                    name: cat?.name ?? 'Sem categoria',
+                    value: c[k],
+                    color: cat?.color,
+                    icon: catIcon(cat),
+                };
+            })
+            .filter((c) => c.value > 0)
+            .sort((a, b) => b.value - a.value);
+    });
+    catTotal = computed(() => this.catItems().reduce((s, c) => s + c.value, 0));
+    pct = (v: number) => (this.catTotal() ? Math.round((v / this.catTotal()) * 1000) / 10 : 0);
     line = computed(() => this.days().map((d) => ({ label: d.day.slice(8) + '/' + d.day.slice(5, 7), value: d.balance })));
     bars = computed<FlowMonth[]>(() =>
         this.days().map((d) => ({ key: d.day, label: String(+d.day.slice(8)), inc: d.income, exp: d.expense })),
@@ -149,10 +280,12 @@ export class Balance {
                         ? sb.rpc('balance_by_day', { p_from: m, p_to: end }).then((r) => (r.data ?? []) as Day[])
                         : Promise.resolve([] as Day[]),
                     must(sb.rpc('report_by_month', { p_from: addMonths(m, -5), p_to: monthEnd(m) })),
+                    must(sb.rpc('report_by_category', { p_from: m, p_to: monthEnd(m) })),
                 ]),
-            ([d, mo]) => {
+            ([d, mo, c]) => {
                 this.days.set(d);
                 this.months.set(mo as Month[]);
+                this.byCat.set(c as CatRow[]);
                 this.loading.set(false);
             },
         );
@@ -163,6 +296,10 @@ export class Balance {
     }
     setMonth(key: string) {
         this.router.navigate([], { queryParams: { m: key }, replaceUrl: true });
+    }
+    /** "Outras" da rosca não é categoria: ignora */
+    openCat(id: string) {
+        if (id !== '__other') this.router.navigate(['/lancamentos'], { queryParams: { m: this.month().slice(0, 7), cat: id } });
     }
     openDay(day: string) {
         this.router.navigate(['/lancamentos'], { queryParams: { de: day, ate: day } });
