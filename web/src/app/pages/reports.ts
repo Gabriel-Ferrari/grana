@@ -2,10 +2,11 @@ import { Component, computed, effect, inject, signal, untracked } from '@angular
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Flow, FlowMonth, RankBars, RankItem } from '../charts';
-import { BrlPipe, Store, addMonths, catIcon, monthEnd, monthLabel, must, sb, today } from '../core';
+import { BrlPipe, DmyPipe, Store, Tx, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../core';
+import { Recurring, detectRecurring } from '../recurring';
 
 @Component({
-  imports: [BrlPipe, FormsModule, Flow, RankBars],
+  imports: [BrlPipe, DmyPipe, FormsModule, Flow, RankBars],
   template: `
     <div class="page-title reveal">
       <h1>Relatórios</h1>
@@ -43,6 +44,25 @@ import { BrlPipe, Store, addMonths, catIcon, monthEnd, monthLabel, must, sb, tod
           <g-rank-bars [items]="incomes()" tone="in" [max]="10" (pick)="openCat($event)" />
         </section>
       </div>
+
+      <section class="panel reveal">
+        <div class="panel-head">
+          <div><h2>Contas e assinaturas</h2><p class="muted small" style="margin:.15rem 0 0">Detectadas no histórico dos últimos 6 meses: caem quase todo mês</p></div>
+          <div style="text-align:right"><span class="muted small">Por mês</span><div style="font-weight:750;font-size:1.25rem">{{ -recTotal() | brl }}</div></div>
+        </div>
+        <div class="list">
+          @for (r of recurring(); track r.key) {
+            <div class="item click" (click)="store.open($any(r.last))" tabindex="0" (keydown.enter)="store.open($any(r.last))">
+              <span class="cat-ico" [style.--cc]="store.catById().get(r.category_id ?? '')?.color"><span class="ms">{{ recIcon(r) }}</span></span>
+              <div class="grow"><div class="title">{{ r.name }}</div>
+                <div class="sub">{{ store.catById().get(r.category_id ?? '')?.name ?? 'Sem categoria' }} · {{ r.months }} meses · próxima ~{{ r.next | dmy: true }}</div></div>
+              <span class="amt neg" [title]="r.stable ? 'Valor fixo' : 'Valor varia: mediana dos meses'">{{ r.stable ? '' : '≈ ' }}{{ -r.amount | brl }}</span>
+            </div>
+          } @empty {
+            <div class="empty-state"><span class="ms">event_repeat</span><div><b>Nada recorrente ainda</b>Contas e assinaturas aparecem aqui depois de 3 meses de histórico.</div></div>
+          }
+        </div>
+      </section>
     </div>
   `,
 })
@@ -70,8 +90,20 @@ export class Reports {
   expenses = computed(() => this.rank('expense'));
   incomes = computed(() => this.rank('income'));
 
+  recurring = signal<Recurring[]>([]);
+  recTotal = computed(() => this.recurring().reduce((s, r) => s + r.amount, 0));
+  recIcon = (r: Recurring) => catIcon(this.store.catById().get(r.category_id ?? ''));
+
   constructor() {
     effect(() => { this.store.version(); const f = this.from(), t = this.to(); untracked(() => this.fetch(f, t)); });
+    effect(() => { this.store.version(); untracked(() => this.fetchRecurring()); });
+  }
+
+  /** despesas dos últimos 6 meses (sem parcelas, transferências e pagamentos de fatura) */
+  async fetchRecurring() {
+    const rows = await must(sb.from('transactions').select('*').lt('amount', 0).gte('date', addMonths(monthStart(today()), -6)).lte('date', today())
+      .is('transfer_id', null).is('pays_card_id', null).is('installments', null).limit(5000));
+    this.recurring.set(detectRecurring(rows as Tx[], today()));
   }
 
   setPreset(n: number) {
