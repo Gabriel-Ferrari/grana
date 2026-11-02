@@ -641,3 +641,7 @@ body:has(.sel-bar) .toast { margin-bottom: 6.6rem; }
 @media (max-width: 560px) { .inv-break { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pay-row .title { font-weight: 600; }
 #a-pagar { scroll-margin-top: 5.5rem; }
+
+/* limites: toque abre os lançamentos da categoria */
+.bud-open { cursor: pointer; border-radius: 12px; margin: -.3rem -.4rem; padding: .3rem .4rem; transition: background .15s; }
+.bud-open:hover, .bud-open:focus-visible { background: var(--sunk); }

@@ -1,5 +1,6 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { Meter } from '../charts';
 import { BrlPipe, Store, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, notify, sb, toCents, today } from '../core';
 import { Icon } from '../icon';
@@ -19,6 +20,9 @@ import { Icon } from '../icon';
     <section class="panel hero reveal">
       <span class="muted">Gasto nas categorias com limite</span>
       <div class="hero-value" style="font-size:clamp(2rem,5vw,2.8rem)">{{ totalUsed() | brl }} <span style="font-size:.45em;font-weight:600" class="muted">de {{ totalLimit() | brl }}</span></div>
+      @if (totalLimit()) {
+        <p style="margin:.1rem 0 .3rem;font-weight:650" [class.neg]="totalUsed() > totalLimit()">{{ totalUsed() > totalLimit() ? 'Passou' : 'Disponível' }} {{ abs(totalLimit() - totalUsed()) | brl }} · {{ verdict() }}</p>
+      }
       @if (pace() !== null) { <p class="muted" style="margin:0">Passaram {{ (pace()! * 100).toFixed(0) }}% do mês. O traço em cada barra marca até onde seria o ritmo ideal hoje.</p> }
     </section>
 
@@ -26,8 +30,13 @@ import { Icon } from '../icon';
       <div class="stack" style="gap:1.4rem">
         @for (b of items(); track b.category_id) {
           <div>
-            <g-meter [label]="b.name" [value]="b.used" [max]="b.amount" [pace]="pace()" />
-            <button class="btn ghost" style="font-size:.78rem;padding:.2rem .4rem;margin-top:.2rem" (click)="remove(b.category_id, b.name)"><g-icon name="close" [size]="15" />remover limite</button>
+            <div class="bud-open" role="link" tabindex="0" (click)="open(b.category_id)" (keydown.enter)="open(b.category_id)" title="Ver lançamentos da categoria">
+              <g-meter [label]="b.name" [value]="b.used" [max]="b.amount" [pace]="pace()" />
+            </div>
+            <div class="row between small" style="margin-top:.25rem;gap:.6rem">
+              <span class="muted">@if (b.prev) {{{ b.used >= b.prev ? '▲' : '▼' }} {{ pct(b.used, b.prev) }}% vs {{ prevLabel() }} ({{ b.prev | brl }})} @else {sem gasto em {{ prevLabel() }}}</span>
+              <button class="btn ghost" style="font-size:.78rem;padding:.2rem .4rem" (click)="remove(b.category_id, b.name)"><g-icon name="close" [size]="15" />remover</button>
+            </div>
           </div>
         } @empty {
           <div class="empty-state"><g-icon name="track_changes" /><div><b>Nenhum limite ainda</b>Defina quanto quer gastar por mês numa categoria — vale para todos os meses.</div></div>
@@ -60,12 +69,25 @@ import { Icon } from '../icon';
 })
 export class Budgets {
   store = inject(Store);
+  router = inject(Router);
   addMonths = addMonths;
   month = signal(monthStart(today()));
   label = computed(() => monthLabel(this.month()));
   loading = signal(true);
   budgets = signal<{ category_id: string; amount: number }[]>([]);
   spent = signal(new Map<string, number>());
+  prevSpent = signal(new Map<string, number>());
+  prevLabel = computed(() => monthLabel(addMonths(this.month(), -1), true).replace('.', ''));
+  abs = Math.abs;
+  pct = (a: number, b: number) => Math.round(Math.abs(a - b) / b * 100);
+  /** leitura do total, como a dica do rodapé do Organizze */
+  verdict = computed(() => {
+    const used = this.totalUsed(), lim = this.totalLimit(), p = this.pace();
+    if (used > lim) return 'limite do mês estourado';
+    if (p === null) return used / lim > 0.9 ? 'quase no limite' : 'dentro do limite';
+    return used / lim <= p ? 'no ritmo, boa margem' : 'acima do ritmo: segure até o fim do mês';
+  });
+  open(cat: string) { this.router.navigate(['/lancamentos'], { queryParams: { cat, m: this.month().slice(0, 7) } }); }
   newCat = '';
   newValue: number | null = null;
 
@@ -78,7 +100,7 @@ export class Budgets {
   expenseCats = computed(() => this.store.categories().filter((c) => c.kind === 'expense' && !c.parent_id && !c.archived));
   items = computed(() => this.budgets().map((b) => {
     const c = this.store.catById().get(b.category_id);
-    return { ...b, used: this.spent().get(b.category_id) ?? 0, name: c?.name ?? '?' };
+    return { ...b, used: this.spent().get(b.category_id) ?? 0, prev: this.prevSpent().get(b.category_id) ?? 0, name: c?.name ?? '?' };
   }).sort((a, b) => b.used / b.amount - a.used / a.amount));
   totalUsed = computed(() => this.items().reduce((s, b) => s + b.used, 0));
   totalLimit = computed(() => this.items().reduce((s, b) => s + b.amount, 0));
@@ -96,10 +118,13 @@ export class Budgets {
 
   async fetch(m: string) {
     this.loading.set(true);
-    const [b, r] = await Promise.all([
+    const prev = addMonths(m, -1);
+    const [b, r, pr] = await Promise.all([
       must(sb.from('budgets').select('category_id, amount')),
       must(sb.rpc('report_by_category', { p_from: m, p_to: monthEnd(m) })),
+      must(sb.rpc('report_by_category', { p_from: prev, p_to: monthEnd(prev) })),
     ]);
+    this.prevSpent.set(new Map((pr as { category_id: string; expense: number }[]).map((x) => [x.category_id, x.expense])));
     this.budgets.set(b as { category_id: string; amount: number }[]);
     this.spent.set(new Map((r as { category_id: string; expense: number }[]).map((x) => [x.category_id, x.expense])));
     this.loading.set(false);
