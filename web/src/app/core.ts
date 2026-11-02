@@ -1,11 +1,14 @@
 import { Injectable, Pipe, PipeTransform, computed, signal } from '@angular/core';
 import { createClient, Session } from '@supabase/supabase-js';
+import { processLock } from '@supabase/auth-js';
 import { env } from '../env';
 import type { TxDraft } from './tx-form';
 import { guessIcon } from './icon';
 import { bankOf } from './banks';
 
-export const sb = createClient(env.supabaseUrl, env.supabaseKey);
+// processLock: trava só dentro da aba. O padrão (navigator.locks) é compartilhado entre abas e trava o app quando uma aba
+// antiga do grana fica congelada em segundo plano no Chrome/TWA segurando o lock (getSession() nunca responde).
+export const sb = createClient(env.supabaseUrl, env.supabaseKey, { auth: { lock: processLock } });
 
 export interface Account { id: string; name: string; kind: string; color: string | null; archived: boolean; balance: number; forecast: number; institution: string | null }
 export interface Card {

@@ -645,3 +645,19 @@ body:has(.sel-bar) .toast { margin-bottom: 6.6rem; }
 /* limites: toque abre os lançamentos da categoria */
 .bud-open { cursor: pointer; border-radius: 12px; margin: -.3rem -.4rem; padding: .3rem .4rem; transition: background .15s; }
 .bud-open:hover, .bud-open:focus-visible { background: var(--sunk); }
+
+/* celular com fonte grande: valores não quebram no sinal, linha mais compacta */
+.sum-strip b, .inv-break b { white-space: nowrap; }
+@media (max-width: 560px) {
+  .sum-strip { padding: .75rem .8rem; gap: .35rem; }
+  .sum-strip b { font-size: .92rem; letter-spacing: -.02em; }
+  .item { gap: .6rem; padding: .7rem .35rem; }
+  .item .amt { font-size: .9rem; }
+  .item .cat-ico { width: 32px; height: 32px; border-radius: 10px; }
+  .item + .item::before { left: calc(.35rem + 32px + .6rem); }
+  .paid-btn { width: 28px; height: 32px; }
+  .item > span[style*="width:30px"] { width: 28px !important; }
+}
+/* toque longo seleciona o lançamento, não o texto */
+@media (hover: none) { .item.click { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; } }
+@media (max-width: 560px) { .inv-break b { font-size: .9rem; letter-spacing: -.02em; } .inv-break { gap: .5rem .8rem; } }

@@ -24,7 +24,7 @@ import { Recurring, detectRecurring } from '../recurring';
         <div class="panel-head">
           <div><h2>Entradas × saídas</h2><p class="muted small" style="margin:.15rem 0 0">Toque num mês para ver os lançamentos</p></div>
           <div style="text-align:right"><span class="muted small">Resultado do período</span>
-            <div style="font-weight:750;font-size:1.25rem" [class.neg]="sum().inc - sum().exp < 0" [class.pos]="sum().inc - sum().exp > 0">{{ sum().inc - sum().exp | brl }}</div></div>
+            <div style="font-weight:750;font-size:1.25rem;white-space:nowrap" [class.neg]="sum().inc - sum().exp < 0" [class.pos]="sum().inc - sum().exp > 0">{{ sum().inc - sum().exp | brl }}</div></div>
         </div>
         <g-flow [months]="months()" [active]="current" (pick)="openMonth($event)" />
         <details class="table-view"><summary>Ver em tabela</summary>
@@ -48,7 +48,7 @@ import { Recurring, detectRecurring } from '../recurring';
       <section class="panel reveal">
         <div class="panel-head">
           <div><h2>Contas e assinaturas</h2><p class="muted small" style="margin:.15rem 0 0">Detectadas no histórico dos últimos 6 meses: caem quase todo mês</p></div>
-          <div style="text-align:right"><span class="muted small">Por mês</span><div style="font-weight:750;font-size:1.25rem">{{ -recTotal() | brl }}</div></div>
+          <div style="text-align:right"><span class="muted small">Por mês</span><div style="font-weight:750;font-size:1.25rem;white-space:nowrap">{{ -recTotal() | brl }}</div></div>
         </div>
         <div class="list">
           @for (r of recurring(); track r.key) {

@@ -63,7 +63,7 @@ type Inv = Invoice & { due: number; running_due: number };
           </div>
 
           <div class="inv-break">
-            <div><span>Saldo anterior</span><b [class.pos]="carry(i) < 0">{{ carry(i) < 0 ? 'crédito ' : '' }}{{ 0 - carry(i) | brl }}</b></div>
+            <div><span>{{ carry(i) < 0 ? 'Crédito anterior' : 'Saldo anterior' }}</span><b [class.pos]="carry(i) < 0">{{ 0 - carry(i) | brl }}</b></div>
             <div><span>Gastos do mês</span><b>{{ 0 - i.total | brl }}</b></div>
             <div><span>Pagamentos</span><b [class.pos]="i.paid > 0">{{ i.paid | brl }}</b></div>
             <div><span>{{ i.is_paid ? 'Fatura' : 'Falta pagar' }}</span><b [class.neg]="i.due > 0">{{ i.is_paid ? 'paga' : (0 - i.due | brl) }}</b></div>
