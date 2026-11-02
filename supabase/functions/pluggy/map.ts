@@ -26,6 +26,8 @@ const brDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { time
 
 export function toRow(t: PluggyTx, ctx: {
   user_id: string; account_id: string | null; card_id: string | null; paysCard: string | null; invoices: { invoice_date: string }[];
+  /** corrente e poupança ligadas na mesma conta do grana: a baixa automática entre elas se anula, não lança */
+  skipInternal?: boolean;
 }): Row | null {
   if (t.status === 'PENDING') return null;
   const cents = Math.round(Math.abs(t.amount) * 100);
@@ -42,13 +44,15 @@ export function toRow(t: PluggyTx, ctx: {
       .filter((x) => x.diff >= -20 && x.diff <= 40).sort((a, b) => Math.abs(a.diff) - Math.abs(b.diff))[0];
     if (near) { pays = ctx.paysCard; invoice_date = near.d; }
   }
+  const internal = !pays && INTERNA.test(t.description);
+  if (internal && ctx.skipInternal) return null;
   const inst = t.creditCardMetadata?.totalInstallments && t.creditCardMetadata.totalInstallments > 1 ? t.creditCardMetadata : null;
   return {
     user_id: ctx.user_id, ext_id: `pluggy:${t.id}`, source: 'openfinance', description: desc, amount, date, paid: true, reviewed: false,
     account_id: ctx.account_id, card_id: ctx.card_id, pays_card_id: pays, invoice_date,
     category_id: null, installment: inst?.installmentNumber ?? null, installments: inst?.totalInstallments ?? null,
     _pluggyCategory: t.category ?? null,
-    transfer_id: !pays && INTERNA.test(t.description) ? uuidOf('pluggy:' + t.id) : null,
+    transfer_id: internal ? uuidOf('pluggy:' + t.id) : null,
   };
 }
 

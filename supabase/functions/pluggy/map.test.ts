@@ -62,6 +62,13 @@ test('baixa automática da poupança vira transferência (não é receita)', () 
   assert.equal(toRow(tx({ id: 'p4', type: 'CREDIT', description: 'PIX RECEBIDO - REM  JULIA', amount: 10 }), ctxAcc)!.transfer_id, null);
 });
 
+test('corrente + poupança na mesma conta: baixa automática não lança; o resto lança', () => {
+  const ctx = { ...ctxAcc, skipInternal: true };
+  assert.equal(toRow(tx({ id: 'q1', type: 'CREDIT', amount: 50, description: 'BAIXA AUTOMAT POUPANCA* - DOCTO: 528432' }), ctx), null);
+  assert.equal(toRow(tx({ id: 'q2', amount: -50, description: 'BAIXA AUTOM C CORRENTE* - DOCTO: 528432' }), ctx), null);
+  assert.ok(toRow(tx({ id: 'q3', type: 'CREDIT', amount: 1349.69, description: 'PIX RECEBIDO - REM  JULIA' }), ctx));
+});
+
 test('categoria da Pluggy -> categoria do grana', () => {
   const cats = [{ id: 'c1', name: 'Mercado', kind: 'expense' }, { id: 'c2', name: 'Salário', kind: 'income' }];
   assert.equal(mapCategory('Groceries', 'expense', cats), 'c1');

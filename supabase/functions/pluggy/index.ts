@@ -47,6 +47,8 @@ async function syncUser(user_id: string, key: string) {
       const { data: mapped } = await db.from('pluggy_accounts').select('*').eq('item_id', it.id).eq('ignored', false)
         .or('account_id.not.is.null,card_id.not.is.null');
       const cardOfItem = (mapped ?? []).filter((m) => m.card_id);
+      // mais de uma conta do banco no mesmo destino (ex.: corrente + poupança automática do Bradesco)
+      const shared = new Set((mapped ?? []).map((m) => m.account_id).filter((id, i, a) => id && a.indexOf(id) !== i));
 
       const from = brDate(new Date(it.last_sync_at ? Date.parse(it.last_sync_at) - 10 * 864e5 : Date.now() - 90 * 864e5).toISOString());
       for (const m of mapped ?? []) {
@@ -62,7 +64,7 @@ async function syncUser(user_id: string, key: string) {
         // pagamento de fatura na conta -> liga ao cartão do mesmo banco (um item = um banco no MeuPluggy)
         const invoices = cardOfItem.length === 1
           ? (await db.from('invoices').select('invoice_date').eq('card_id', cardOfItem[0].card_id)).data ?? [] : [];
-        const rows = txs.map((t) => toRow(t, { user_id, account_id: m.account_id, card_id: m.card_id, paysCard: cardOfItem[0]?.card_id ?? null, invoices }))
+        const rows = txs.map((t) => toRow(t, { user_id, account_id: m.account_id, card_id: m.card_id, paysCard: cardOfItem[0]?.card_id ?? null, invoices, skipInternal: shared.has(m.account_id) }))
           .filter((r): r is NonNullable<typeof r> => !!r);
         if (!rows.length) continue;
 
