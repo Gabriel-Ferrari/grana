@@ -60,6 +60,7 @@ const UI = [
     'account_balance',
     'link',
     'content_copy',
+    'delete_sweep',
     'event_repeat',
     'splitscreen',
     'savings',

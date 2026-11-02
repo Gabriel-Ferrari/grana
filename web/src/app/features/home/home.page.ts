@@ -266,7 +266,12 @@ function loadLayout(): HomeCard[] {
                                         </p>
                                         <div class="list">
                                             @for (t of review().slice(0, 3); track t.id) {
-                                                <div class="item rev-item">
+                                                <div
+                                                    class="item click rev-item"
+                                                    (click)="store.open(t)"
+                                                    (keydown.enter)="store.open(t)"
+                                                    tabindex="0"
+                                                >
                                                     <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
                                                         ><span class="ms">{{ icon(t) }}</span></span
                                                     >
@@ -277,18 +282,30 @@ function loadLayout(): HomeCard[] {
                                                             {{ t.date | dmy: true }} ·
                                                             {{ t.source === 'openfinance' ? 'banco' : 'notificação' }}
                                                         </div>
-                                                        <g-chip-select
-                                                            label="Sem categoria"
-                                                            [options]="catOptions(t)"
-                                                            [value]="t.category_id ?? ''"
-                                                            (valueChange)="setCat(t, $event)"
-                                                        />
+                                                        <!-- trocar a categoria aqui não abre o formulário -->
+                                                        <div
+                                                            class="rev-cat"
+                                                            (click)="$event.stopPropagation()"
+                                                            (keydown.enter)="$event.stopPropagation()"
+                                                            tabindex="-1"
+                                                        >
+                                                            <g-chip-select
+                                                                label="Sem categoria"
+                                                                [options]="catOptions(t)"
+                                                                [value]="t.category_id ?? ''"
+                                                                (valueChange)="setCat(t, $event)"
+                                                            />
+                                                        </div>
                                                     </div>
                                                     <div class="rev-side">
                                                         <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0">{{
                                                             t.amount | brl
                                                         }}</span>
-                                                        <button class="btn rev-ok" (click)="approve(t)" aria-label="Marcar como revisado">
+                                                        <button
+                                                            class="btn rev-ok"
+                                                            (click)="$event.stopPropagation(); approve(t)"
+                                                            aria-label="Marcar como revisado"
+                                                        >
                                                             <g-icon name="check" [size]="20" />
                                                         </button>
                                                     </div>
@@ -306,7 +323,7 @@ function loadLayout(): HomeCard[] {
                                     </div>
                                     <div class="list">
                                         @for (t of bills(); track t.id) {
-                                            <div class="item">
+                                            <div class="item click" (click)="store.open(t)" (keydown.enter)="store.open(t)" tabindex="0">
                                                 <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
                                                     ><span class="ms">{{ icon(t) }}</span></span
                                                 >
@@ -322,7 +339,7 @@ function loadLayout(): HomeCard[] {
                                                 <span class="amt neg">{{ -t.amount | brl }}</span>
                                                 <button
                                                     class="paid-btn"
-                                                    (click)="pay(t)"
+                                                    (click)="$event.stopPropagation(); pay(t)"
                                                     title="Marcar como paga"
                                                     aria-label="Marcar como paga"
                                                 >

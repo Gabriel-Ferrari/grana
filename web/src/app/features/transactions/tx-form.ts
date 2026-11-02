@@ -305,15 +305,29 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             <footer>
                 <div class="row">
                     @if (draft().id) {
-                        <button type="button" class="btn ghost danger" (click)="remove(false)">
-                            <g-icon name="delete" [size]="18" />Excluir
+                        <button type="button" class="btn ghost icon danger" (click)="remove(false)" aria-label="Excluir" title="Excluir">
+                            <g-icon name="delete" [size]="22" />
                         </button>
                         @if (draft().group_id) {
-                            <button type="button" class="btn ghost danger" (click)="remove(true)">e próximos</button>
+                            <button
+                                type="button"
+                                class="btn ghost icon danger"
+                                (click)="remove(true)"
+                                aria-label="Excluir este e os próximos"
+                                title="Excluir este e os próximos"
+                            >
+                                <g-icon name="delete_sweep" [size]="22" />
+                            </button>
                         }
                         @if (kind() !== 'transfer') {
-                            <button type="button" class="btn ghost" (click)="duplicate()" title="Novo lançamento igual, com data de hoje">
-                                <g-icon name="content_copy" [size]="18" />Duplicar
+                            <button
+                                type="button"
+                                class="btn ghost icon"
+                                (click)="duplicate()"
+                                aria-label="Duplicar"
+                                title="Duplicar (novo lançamento igual, com data de hoje)"
+                            >
+                                <g-icon name="content_copy" [size]="22" />
                             </button>
                         }
                     }

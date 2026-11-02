@@ -3355,3 +3355,9 @@ body:has(.sel-bar) .toast {
 .card-nums > div:last-child {
     text-align: right;
 }
+
+/* notificações recentes: mesma largura à direita em todas as linhas (botão "revisar de novo" ou espaço) */
+.notif-row .notif-gap {
+    width: 40px;
+    flex: none;
+}

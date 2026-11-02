@@ -73,19 +73,34 @@ interface Device {
             <div class="panel-head"><h2>Recentes</h2></div>
             <div class="list">
                 @for (n of recent(); track n.id) {
-                    <div class="item">
-                        <span class="cat-ico sm" [style.--cc]="n.status === 'done' ? 'var(--in)' : 'var(--muted)'"
+                    <div class="item notif-row">
+                        <span class="cat-ico" [style.--cc]="n.status === 'done' ? 'var(--in)' : 'var(--muted)'"
                             ><span class="ms">{{ n.status === 'done' ? 'check' : 'close' }}</span></span
                         >
                         <div class="grow">
-                            <div class="title" style="font-weight:600">{{ n.body }}</div>
+                            <div class="title">
+                                @if (n.parsed; as p) {
+                                    {{ p.amount | brl }} · {{ p.merchant }}
+                                } @else {
+                                    {{ n.title || n.body }}
+                                }
+                            </div>
                             <div class="sub">
                                 {{ bank(n.package) }} · {{ n.posted_at | date: 'dd/MM HH:mm' }} ·
                                 {{ n.status === 'done' ? 'lançado' : 'ignorado' }}
                             </div>
                         </div>
                         @if (n.status === 'ignored') {
-                            <button class="btn ghost" (click)="setStatus(n, 'pending')"><g-icon name="undo" [size]="16" />revisar</button>
+                            <button
+                                class="btn ghost icon"
+                                (click)="setStatus(n, 'pending')"
+                                aria-label="Revisar de novo"
+                                title="Revisar de novo"
+                            >
+                                <g-icon name="undo" [size]="20" />
+                            </button>
+                        } @else {
+                            <span class="notif-gap" aria-hidden="true"></span>
                         }
                     </div>
                 } @empty {
