@@ -7,7 +7,7 @@
         "build": "ng build",
         "watch": "ng build --watch --configuration development",
         "test": "ng test",
-        "deploy": "npm run build && wrangler deploy",
+        "deploy": "npm run build && (cp ../android/build/outputs/apk/debug/grana-coletor-debug.apk dist/web/browser/grana.apk || echo sem APK) && wrangler deploy",
         "preview": "npm run build && wrangler dev",
         "lint": "eslint src",
         "format": "prettier --write \"src/**/*.{ts,html,css}\" \"../supabase/functions/**/*.ts\" \"../scripts/**/*.mjs\"",

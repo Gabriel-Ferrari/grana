@@ -1,7 +1,43 @@
 # grana
 
-Controle financeiro pessoal no estilo Organizze, com infraestrutura **gratuita**, login Google e
-lançamentos automáticos a partir das **notificações dos bancos** no Android.
+App pessoal de finanças no estilo Organizze, com infraestrutura **100% gratuita**. Contas, cartões e faturas,
+categorias, limites, relatórios e balanço — com lançamentos automáticos a partir das **notificações dos bancos**
+no Android e importação via **Open Finance** (MeuPluggy).
+
+- **App web:** https://grana.ferrari-gabriel2002.workers.dev (login Google; instalável como app pelo navegador)
+- **Android:** [baixar `grana.apk`](https://grana.ferrari-gabriel2002.workers.dev/grana.apk) — abre o app web em tela
+  cheia e roda o coletor de notificações. Ao instalar, permita *Instalar apps desconhecidos*; depois ative
+  **grana · coletor** em *Acesso às notificações* (detalhes em [Celular](#4-celular)). APK de depuração, uso pessoal.
+
+<table>
+<tr>
+<td><img src="docs/prints/1-inicio.jpg" width="200" alt="Início"></td>
+<td><img src="docs/prints/2-lancamentos.jpg" width="200" alt="Lançamentos"></td>
+<td><img src="docs/prints/3-novo-lancamento.jpg" width="200" alt="Novo lançamento com teclado"></td>
+</tr>
+<tr>
+<td><img src="docs/prints/4-relatorios.jpg" width="200" alt="Relatórios"></td>
+<td><img src="docs/prints/5-balanco.jpg" width="200" alt="Balanço"></td>
+<td><img src="docs/prints/6-cartoes.jpg" width="200" alt="Cartões e faturas"></td>
+</tr>
+</table>
+
+<img src="docs/prints/0-desktop.jpg" alt="Início no computador">
+
+<sub>Prints com dados fictícios (`docs/demo-seed.sql`).</sub>
+
+### Recursos
+- **Início** personalizável (arrastar blocos): saldo, previsto do mês, ritmo de gastos vs. últimos meses, a pagar,
+  atrasados, 50/30/20.
+- **Lançamentos**: despesa, receita, transferência, parcelas e fixos; teclado com calculadora; filtros, busca,
+  seleção em lote, arrastar para marcar pago/excluir, desfazer; sugestão de descrição e categoria.
+- **Cartões**: limite disponível, faturas por mês, pagamento de fatura.
+- **Relatórios** (categorias, balanço, tags, recorrentes), **Balanço** diário e **Limites** por categoria.
+- **Revisar**: fila dos lançamentos que chegaram sozinhos (notificação/Open Finance).
+- Tema claro/escuro, ocultar valores, atalhos de teclado no desktop.
+
+**Stack:** Angular (signals, standalone) · Supabase (Postgres + RLS, Auth, Edge Functions, cron) · Cloudflare Workers ·
+Android (Kotlin, TWA + NotificationListener) · Pluggy.
 
 ```
 Android (grana coletor) ──POST texto cru──▶ Supabase Edge Function `ingest` ──▶ Postgres (RLS)
@@ -54,6 +90,8 @@ para um só). Prints vão para `/tmp/grana-e2e`. Variáveis: `TARGET_URL`, `TEST
 Usuário dev local: crie com
 `curl -X POST http://127.0.0.1:54321/auth/v1/admin/users -H "apikey: $SERVICE_ROLE" -H "Authorization: Bearer $SERVICE_ROLE" -H 'content-type: application/json' -d '{"email":"dev@grana.local","password":"devdev123","email_confirm":true}'`
 (`SERVICE_ROLE` = `npx supabase status -o env | grep SERVICE_ROLE_KEY`).
+Dados fictícios (prints/demonstração): crie `demo@grana.local` / `demodemo123` do mesmo jeito e rode
+`docker exec -i supabase_db_grana psql -U postgres < docs/demo-seed.sql`.
 
 Celular contra o Supabase local: `adb reverse tcp:54321 tcp:54321` e endpoint `http://127.0.0.1:54321/functions/v1/ingest`.
 
