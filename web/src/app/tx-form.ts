@@ -26,7 +26,8 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
           <button type="button" class="btn ghost icon on-k" (click)="close.emit(null)" aria-label="Fechar"><g-icon name="close" /></button>
         </div>
         <div class="tx-amount" (click)="mobile && openKeypad()">
-          <g-money [(cents)]="f.cents" inputId="valor" [keypad]="keypad()" />
+          @if (calc(); as c) { <span class="calc-expr" aria-live="polite">{{ fmt(c.acc) }} {{ c.op === '+' ? '+' : '−' }}</span> }
+          <g-money [(cents)]="f.cents" inputId="valor" [keypad]="keypad()" (keydown)="calcKey($event)" />
           @if (kind() !== 'transfer' && f.origin.startsWith('a:')) {
             <button type="button" class="thumb" [class.on]="f.paid" (click)="$event.stopPropagation(); f.paid = !f.paid" [attr.aria-pressed]="f.paid"
                     [title]="f.paid ? (kind() === 'income' ? 'Recebido' : 'Pago') : (kind() === 'income' ? 'A receber' : 'A pagar')">
@@ -100,7 +101,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
       @if (keypad()) {
         <div class="keypad-sheet">
           <span class="grabber"></span>
-          <g-keypad (key)="$event < 0 ? money()?.back() : money()?.press($event)" (done)="keypad.set(false)" />
+          <g-keypad (key)="$event < 0 ? money()?.back() : money()?.press($event)" (op)="onOp($event)" (done)="onOp('='); keypad.set(false)" />
         </div>
       }
 
@@ -114,7 +115,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
         </div>
         <div class="row">
           @if (!draft().id) { <button type="button" class="btn ghost" [disabled]="busy() || !f.cents" (click)="save(true)" title="Salvar e lançar outro">+ Outro</button> }
-          <button class="btn save" [disabled]="busy() || !f.cents"><g-icon name="check" [size]="22" />Salvar</button>
+          <button class="btn save" [disabled]="busy() || (!f.cents && !calc())"><g-icon name="check" [size]="22" />Salvar</button>
         </div>
       </footer>
     </form>
@@ -236,7 +237,23 @@ export class TxForm implements OnInit {
     return { account_id: t === 'a' ? id : null, card_id: t === 'c' ? id : null };
   }
 
+  /** calculadora do valor (como no Organizze): acumulado + operação pendente; o número digitado é o próximo termo */
+  calc = signal<{ acc: number; op: '+' | '-' } | null>(null);
+  onOp(o: '+' | '-' | '=' | 'C') {
+    if (o === 'C') { this.f.cents = 0; this.calc.set(null); return; }
+    const c = this.calc(), cur = this.f.cents;
+    const acc = !c ? cur : !cur ? c.acc : c.op === '+' ? c.acc + cur : c.acc - cur;
+    if (o === '=') { this.f.cents = Math.max(0, acc); this.calc.set(null); }
+    else { this.calc.set({ acc, op: o }); this.f.cents = 0; }
+  }
+  /** desktop: + − = no campo do valor */
+  calcKey(e: KeyboardEvent) {
+    const o = e.key === '+' ? '+' : e.key === '-' ? '-' : e.key === '=' ? '=' : null;
+    if (o) { e.preventDefault(); this.onOp(o); }
+  }
+
   async save(another = false) {
+    if (this.calc()) this.onOp('=');
     const total = this.f.cents;
     if (total <= 0 || !this.f.origin) return;
     this.busy.set(true);

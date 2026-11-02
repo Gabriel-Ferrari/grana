@@ -42,16 +42,24 @@ export class Money {
   selector: 'g-keypad',
   imports: [Icon],
   template: `
-    <div class="keypad" role="group" aria-label="Teclado numérico">
-      @for (d of [1, 2, 3, 4, 5, 6, 7, 8, 9]; track d) { <button type="button" (click)="key.emit(d)">{{ d }}</button> }
+    <div class="keypad" role="group" aria-label="Teclado numérico com calculadora">
+      @for (d of [1, 2, 3]; track d) { <button type="button" (click)="key.emit(d)">{{ d }}</button> }
+      <button type="button" class="k-op" (click)="op.emit('+')" aria-label="Somar">+</button>
+      @for (d of [4, 5, 6]; track d) { <button type="button" (click)="key.emit(d)">{{ d }}</button> }
+      <button type="button" class="k-op" (click)="op.emit('-')" aria-label="Subtrair">−</button>
+      @for (d of [7, 8, 9]; track d) { <button type="button" (click)="key.emit(d)">{{ d }}</button> }
+      <button type="button" class="k-op" (click)="op.emit('=')" aria-label="Igual">=</button>
       <button type="button" class="k-done" (click)="done.emit()" aria-label="Pronto"><g-icon name="check" [size]="26" /></button>
       <button type="button" (click)="key.emit(0)">0</button>
       <button type="button" class="k-back" (click)="key.emit(-1)" aria-label="Apagar"><g-icon name="backspace" [size]="24" /></button>
+      <button type="button" class="k-op" (click)="op.emit('C')" aria-label="Zerar">C</button>
     </div>
   `,
 })
 export class Keypad {
   key = output<number>();
+  /** calculadora: soma/subtrai valores (ex.: itens da conta, desconto); C zera */
+  op = output<'+' | '-' | '=' | 'C'>();
   done = output<void>();
 }
 

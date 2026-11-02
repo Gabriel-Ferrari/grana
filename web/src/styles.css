@@ -626,3 +626,10 @@ body:has(.sel-bar) .toast { margin-bottom: 6.6rem; }
 /* situação da fatura */
 .inv-closed { color: var(--ink-2); font-weight: 650; }
 .inv-late { color: var(--danger); font-weight: 700; }
+
+/* calculadora no teclado do valor */
+.keypad { grid-template-columns: repeat(4, 1fr); }
+.keypad button { width: min(80px, 19vw); }
+.keypad .k-op { border-color: transparent; background: var(--sunk); font-size: 1.7rem; color: var(--ink-2); }
+.calc-expr { color: white; opacity: .8; font-weight: 650; font-size: 1.05rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.drawer.tx[data-kind='transfer'] .calc-expr { color: var(--paper); }
