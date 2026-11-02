@@ -54,6 +54,14 @@ function brDate(ms: number): string {
     return new Date(ms).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 }
 
+/** Notificação que não vira lançamento e nem precisa de revisão: compra negada ou aviso do banco (promo, saldo, código…). */
+export function ignoredReason(raw: string): string | null {
+    const t = normalize(raw);
+    if (/(recusad|negad|nao autorizad|nao aprovad)/i.test(t)) return 'compra negada';
+    if (/cancelad|bloquead/i.test(t)) return 'cancelada ou bloqueada';
+    return IGNORE.test(t) ? 'aviso do banco' : null;
+}
+
 export function parse(raw: string, postedAt: number): Parsed | null {
     const t = normalize(raw);
     if (IGNORE.test(t)) return null;

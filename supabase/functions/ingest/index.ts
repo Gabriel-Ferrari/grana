@@ -2,7 +2,7 @@
 // body: { package, title, text, big_text, sub_text, info_text, text_lines, posted_at (ms), key }
 // Salva notificação crua; se o parser entender e achar conta/cartão, cria o lançamento.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { parse } from './parser.ts';
+import { ignoredReason, parse } from './parser.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const json = (body: unknown, status = 200) =>
@@ -35,17 +35,20 @@ Deno.serve(async (req) => {
     await db.from('devices').update({ last_seen_at: new Date().toISOString() }).eq('token', token);
 
     const parsed = parse(`${title ?? ''}\n${body}`, postedAt);
+    // compra negada / aviso do banco: guarda como ignorada (aparece em Recentes, não pede revisão)
+    const ignored = parsed ? null : ignoredReason(`${title ?? ''}\n${body}`);
     const hash = await sha256(`${pkg}|${n.key ?? ''}|${postedAt}|${body}`);
     const { data: row, error } = await db
         .from('notifications')
         .upsert(
-            { user_id, package: pkg, title, body, posted_at: new Date(postedAt).toISOString(), hash, parsed },
+            { user_id, package: pkg, title, body, posted_at: new Date(postedAt).toISOString(), hash, parsed, ...(ignored ? { status: 'ignored' } : {}) },
             { onConflict: 'user_id,hash', ignoreDuplicates: true },
         )
         .select('id')
         .maybeSingle();
     if (error) return json({ error: error.message }, 500);
     if (!row) return json({ duplicate: true });
+    if (ignored) return json({ id: row.id, ignored });
     if (!parsed) return json({ id: row.id, parsed: null });
 
     // destino: cartão pelo final ou pelo app; conta pelo app

@@ -3,7 +3,7 @@
 // caixa de entrada do app pra cá e ajuste o parser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parse } from './parser.ts';
+import { ignoredReason, parse } from './parser.ts';
 
 const at = Date.parse('2026-10-31T17:00:00Z');
 const cases: [string, ReturnType<typeof parse>][] = [
@@ -44,3 +44,12 @@ const cases: [string, ReturnType<typeof parse>][] = [
 for (const [text, expected] of cases) {
     test(text.slice(0, 50), () => assert.deepEqual(parse(text, at), expected));
 }
+
+test('compra negada e avisos do banco são ignorados sozinhos', () => {
+    assert.equal(
+        ignoredReason('Compra no crédito negada\nCompra de R$24,90 negada em DL     *DLRAPPIPROBR com seu cartão Visa final 0817.'),
+        'compra negada',
+    );
+    assert.equal(ignoredReason('Bradesco Cartões\nSua fatura fechou. Valor R$ 1.454,49'), 'aviso do banco');
+    assert.equal(ignoredReason('Compra de R$ 99,90 APROVADA em LOJAS RENNER FL, no Cartão final 5529.'), null);
+});
