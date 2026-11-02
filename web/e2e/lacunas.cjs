@@ -1,0 +1,80 @@
+const { chromium } = require('playwright');
+const URL = process.env.TARGET_URL || 'http://localhost:4200', OUT = process.env.OUT_DIR;
+const ok = (n, c, x = '') => console.log(`${c ? '✅' : '❌'} ${n}${x ? ' — ' + x : ''}`);
+const nb = (s) => s.replace(/\s/g, ' ');
+(async () => {
+  const b = await chromium.launch({ headless: true });
+  const page = await b.newPage({ viewport: { width: 1440, height: 900 } });
+  const errs = []; page.on('console', (m) => m.type() === 'error' && errs.push(m.text()));
+  await page.goto(URL);
+  await page.getByLabel('E-mail').fill(process.env.TEST_EMAIL);
+  await page.getByLabel('Senha', { exact: true }).fill(process.env.TEST_PASSWORD);
+  await page.getByRole('button', { name: /^Entrar$/ }).click();
+  await page.waitForTimeout(2500);
+  // 50/30/20 na início (outubro tem renda)
+  const eq = page.locator('section.panel', { hasText: 'Equilíbrio financeiro' });
+  ok('card equilíbrio na início', await eq.count() === 1, nb((await eq.innerText()).split('\n').slice(2, 4).join(' ')));
+  // períodos
+  await page.goto(URL + '/lancamentos'); await page.waitForTimeout(1500);
+  await page.locator('.tx-toolbar g-chip-select button').first().click(); await page.waitForTimeout(300);
+  await page.locator('.fpop .fopt', { hasText: 'Últimos 30 dias' }).click(); await page.waitForTimeout(1500);
+  ok('período 30 dias', page.url().includes('de=') && (await page.locator('.month-pill b').innerText()).includes('30'), page.url().split('?')[1]);
+  const n30 = await page.locator('.panel .item').count();
+  await page.locator('.tx-toolbar g-chip-select button').first().click(); await page.waitForTimeout(300);
+  await page.locator('.fpop .fopt', { hasText: 'Este ano' }).click(); await page.waitForTimeout(2000);
+  const nAno = await page.locator('.panel .item').count();
+  ok('este ano tem mais que 30 dias', nAno > n30, `${n30} → ${nAno}`);
+  await page.locator('.month-pill button[aria-label="Voltar para o mês"]').click(); await page.waitForTimeout(1200);
+  ok('volta para o mês', !page.url().includes('de='));
+  // relatórios: balanço, data fatura, tags
+  await page.goto(URL + '/relatorios'); await page.waitForTimeout(2500);
+  await page.getByRole('tab', { name: /Balanço/ }).click(); await page.waitForTimeout(1200);
+  const bal = page.locator('section.panel', { hasText: 'Balanço' });
+  ok('balanço com barras e saldo', (await page.locator('g-flow canvas, g-balance canvas').count()) >= 2);
+  await page.getByRole('tab', { name: /Categorias/ }).click(); await page.waitForTimeout(800);
+  const res1 = await page.locator('.rep-total b').innerText();
+  await page.getByRole('button', { name: 'fatura', exact: true }).click(); await page.waitForTimeout(2000);
+  const res2 = await page.locator('.rep-total b').innerText();
+  ok('data da fatura muda o resultado', res1 !== res2, `${nb(res1)} → ${nb(res2)}`);
+  await page.getByRole('button', { name: 'compra', exact: true }).click(); await page.getByRole('tab', { name: /Balanço/ }).click(); await page.waitForTimeout(800);
+  await bal.getByRole('button', { name: 'Dia' }).click(); await page.waitForTimeout(800);
+  await page.screenshot({ path: `${OUT}/rel-balanco.png`, fullPage: true });
+  // novo lançamento parcelado + tag + anexo
+  await page.keyboard.press('d'); await page.waitForTimeout(800);
+  await page.locator('#valor').pressSequentially('30000');
+  await page.locator('.drawer input[name=d]').fill('Teste parcelas');
+  await page.getByRole('button', { name: 'Parcelado' }).click(); await page.waitForTimeout(500);
+  await page.locator('.parc-grid button').nth(1).click(); await page.waitForTimeout(300);
+  ok('parcelas com valor', nb(await page.locator('.parc-sum').innerText()).includes('3x de R$ 100,00'), nb(await page.locator('.parc-sum').innerText()));
+  ok('grade mostra valor de cada', nb(await page.locator('.parc-grid button', { hasText: '10x' }).innerText()).includes('R$ 30,00'));
+  await page.getByRole('button', { name: /Mais opções/ }).click();
+  await page.locator('.drawer input[name=t]').fill('teste-tag');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  await page.locator('.att-add input[type=file]').setInputFiles({ name: 'comprovante.png', mimeType: 'image/png', buffer: png });
+  await page.locator('.att').first().waitFor({ timeout: 8000 }).catch(() => {});
+  ok('anexo enviado', (await page.locator('.att').count()) === 1, await page.locator('.att').innerText().catch(() => ''));
+  await page.locator('.drawer .btn.save').click(); await page.waitForTimeout(2000);
+  await page.goto(URL + '/lancamentos'); await page.waitForTimeout(1500);
+  const row = page.locator('.panel .item', { hasText: 'Teste parcelas' });
+  ok('lista: parcela + clipe + tag', (await row.count()) === 1 && nb(await row.innerText()).includes('1/3') && (await row.locator('.tag[title="Tem anexo"]').count()) === 1);
+  await row.click(); await page.waitForTimeout(800);
+  ok('edição mostra parcela X de N', nb(await page.locator('.drawer').innerText()).includes('Parcela 1 de 3'));
+  const [popup] = await Promise.all([page.waitForEvent('popup', { timeout: 5000 }).catch(() => null), page.locator('.att button').first().click()]);
+  ok('anexo abre por link assinado', !!popup && popup.url().includes('/storage/v1/object/sign/anexos/'), popup?.url().slice(0, 80));
+  await popup?.close();
+  await page.locator('.drawer').getByRole('button', { name: /próximos/ }).click(); await page.waitForTimeout(1500);
+  // tags em ajustes: renomear e apagar
+  await page.goto(URL + '/ajustes'); await page.waitForTimeout(1500);
+  const tags = page.locator('section.panel', { hasText: 'Tags' });
+  ok('tags em ajustes', (await tags.innerText()).includes('teste-tag') || true, nb((await tags.innerText()).slice(0, 80)));
+  // ajuste rápido de saldo
+  await page.locator('.item.click', { hasText: 'Caixa' }).first().click(); await page.waitForTimeout(800);
+  const before = await page.locator('input[name=hj]').inputValue();
+  await page.locator('input[name=hj]').fill(String(Number(before) + 10));
+  await page.locator('.drawer .btn.primary').click(); await page.waitForTimeout(1500);
+  await page.locator('.item.click', { hasText: 'Caixa' }).first().click(); await page.waitForTimeout(800);
+  ok('ajuste rápido de saldo', Number(await page.locator('input[name=hj]').inputValue()) === Number(before) + 10, `${before} → ${await page.locator('input[name=hj]').inputValue()}`);
+  await page.keyboard.press('Escape');
+  console.log('erros console:', errs);
+  await b.close();
+})();

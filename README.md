@@ -47,6 +47,10 @@ cd web && npm i && npx ng serve          # http://localhost:4200 (login dev por 
 Testes: `node --test supabase/functions/ingest/parser.test.ts supabase/functions/pluggy/map.test.ts web/src/app/features/*/*.spec.ts` e
 `docker exec -i supabase_db_grana psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/check.sql`.
 
+Testes de tela (Playwright, 7 roteiros / ~100 verificações, celular e desktop) contra o app local
+(`ng serve` + Supabase local com o usuário dev abaixo): `cd web && npm run e2e` (ou `npm run e2e -- lacunas`
+para um só). Prints vão para `/tmp/grana-e2e`. Variáveis: `TARGET_URL`, `TEST_EMAIL`, `TEST_PASSWORD`, `OUT_DIR`.
+
 Usuário dev local: crie com
 `curl -X POST http://127.0.0.1:54321/auth/v1/admin/users -H "apikey: $SERVICE_ROLE" -H "Authorization: Bearer $SERVICE_ROLE" -H 'content-type: application/json' -d '{"email":"dev@grana.local","password":"devdev123","email_confirm":true}'`
 (`SERVICE_ROLE` = `npx supabase status -o env | grep SERVICE_ROLE_KEY`).
