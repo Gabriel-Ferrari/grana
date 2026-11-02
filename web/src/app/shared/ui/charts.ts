@@ -15,7 +15,9 @@ import {
     viewChild,
 } from '@angular/core';
 import {
+    ArcElement,
     BarController,
+    DoughnutController,
     BarElement,
     CategoryScale,
     Chart,
@@ -33,7 +35,19 @@ import {
 import { BrlPipe, brl, hidden } from '../../core';
 import { Icon } from './icon';
 
-Chart.register(LineController, LineElement, PointElement, BarController, BarElement, CategoryScale, LinearScale, Filler, Tooltip);
+Chart.register(
+    ArcElement,
+    DoughnutController,
+    LineController,
+    LineElement,
+    PointElement,
+    BarController,
+    BarElement,
+    CategoryScale,
+    LinearScale,
+    Filler,
+    Tooltip,
+);
 
 /** Qualquer cor CSS (oklch, light-dark, nomes…) vira rgb(): pinta 1 pixel num canvas e lê de volta. */
 const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
@@ -375,14 +389,22 @@ export interface FlowMonth {
     selector: 'g-flow',
     template: `
         <div class="legend">
-            <span><i class="sw in"></i>Entradas</span><span><i class="sw out"></i>Saídas</span><span><i class="key net"></i>Resultado</span>
+            <span><i class="sw in"></i>Entradas</span><span><i class="sw out"></i>Saídas</span>
+            @if (showNet()) {
+                <span><i class="key net"></i>Resultado</span>
+            }
         </div>
-        <div class="chart-box" style="height:260px"><canvas #cv role="img" aria-label="Entradas, saídas e resultado por mês"></canvas></div>
+        <div class="chart-box" [style.height.px]="height()">
+            <canvas #cv role="img" aria-label="Entradas, saídas e resultado por período"></canvas>
+        </div>
     `,
     host: { style: 'display:block' },
 })
 export class Flow {
     months = input<FlowMonth[]>([]);
+    /** linha "Resultado": útil por mês; por dia vira ruído */
+    showNet = input(true);
+    height = input(260);
     active = input<string>('');
     pick = output<string>();
     cv = viewChild.required<ElementRef<HTMLCanvasElement>>('cv');
@@ -427,20 +449,24 @@ export class Flow {
                         barPercentage: 0.92,
                         order: 2,
                     },
-                    {
-                        type: 'line',
-                        label: 'Resultado',
-                        data: m.map((x) => x.inc - x.exp),
-                        borderColor: t.ink,
-                        borderWidth: 2,
-                        tension: 0.3,
-                        pointRadius: 4,
-                        pointHoverRadius: 6,
-                        pointBackgroundColor: t.surface,
-                        pointBorderColor: t.ink,
-                        pointBorderWidth: 2,
-                        order: 1,
-                    },
+                    ...(this.showNet()
+                        ? [
+                              {
+                                  type: 'line',
+                                  label: 'Resultado',
+                                  data: m.map((x) => x.inc - x.exp),
+                                  borderColor: t.ink,
+                                  borderWidth: 2,
+                                  tension: 0.3,
+                                  pointRadius: 4,
+                                  pointHoverRadius: 6,
+                                  pointBackgroundColor: t.surface,
+                                  pointBorderColor: t.ink,
+                                  pointBorderWidth: 2,
+                                  order: 1,
+                              },
+                          ]
+                        : []),
                 ],
             },
             options: {
@@ -484,6 +510,7 @@ export class Flow {
     constructor() {
         effect(() => {
             this.months();
+            this.showNet();
             this.active();
             hidden();
             this.c.update();
@@ -614,4 +641,96 @@ export class BalanceLine {
             plugins: [crosshair],
         } as ChartConfiguration;
     });
+
+    constructor() {
+        // redesenha quando os dados chegam (sem isso a linha ficava vazia)
+        effect(() => {
+            this.points();
+            hidden();
+            this.c.update();
+        });
+    }
+}
+
+// ───────────────────────── Rosca de categorias (como o relatório do Organizze) ─────────────────────────
+@Component({
+    selector: 'g-donut',
+    template: `
+        <div class="donut-box">
+            <canvas #cv role="img" [attr.aria-label]="label()"></canvas>
+            <div class="donut-center" aria-hidden="true">
+                <span>{{ caption() }}</span
+                ><b>{{ totalText() }}</b>
+            </div>
+        </div>
+    `,
+    host: { style: 'display:block' },
+})
+export class Donut {
+    items = input<RankItem[]>([]);
+    caption = input('Total');
+    pick = output<string>();
+    /** até 7 fatias; o resto vira "Outras" (cor neutra) */
+    slices = computed(() => {
+        const all = this.items().filter((i) => i.value > 0);
+        if (all.length <= 8) return all;
+        const top = all.slice(0, 7);
+        const rest = all.slice(7).reduce((s, i) => s + i.value, 0);
+        return [...top, { id: '__other', name: 'Outras', value: rest, icon: 'more_horiz' } as RankItem];
+    });
+    total = computed(() => this.slices().reduce((s, i) => s + i.value, 0));
+    totalText = computed(() => money(this.total()));
+    label = computed(() =>
+        this.slices()
+            .map((s) => `${s.name}: ${money(s.value, false)}`)
+            .join(', '),
+    );
+    cv = viewChild.required<ElementRef<HTMLCanvasElement>>('cv');
+    private c = useChart(this.cv, (t) => {
+        const sl = this.slices(),
+            tot = this.total() || 1;
+        return {
+            type: 'doughnut',
+            data: {
+                labels: sl.map((s) => s.name),
+                datasets: [
+                    {
+                        data: sl.map((s) => s.value),
+                        backgroundColor: sl.map((s) => s.color || t.muted),
+                        borderColor: t.surface,
+                        borderWidth: 2,
+                        hoverOffset: 6,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '64%',
+                animation: { duration: 700, easing: 'easeOutQuart' },
+                onClick: (_e: unknown, els: { index: number }[]) => {
+                    const s = sl[els[0]?.index ?? -1];
+                    if (s) this.pick.emit(s.id);
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        ...tooltipBase(t),
+                        callbacks: {
+                            label: (item: TooltipItem<'doughnut'>) =>
+                                ` ${item.label}: ${money(Number(item.raw), false)} (${Math.round((Number(item.raw) / tot) * 100)}%)`,
+                        },
+                    },
+                } as never,
+            },
+        } as ChartConfiguration;
+    });
+
+    constructor() {
+        effect(() => {
+            this.slices();
+            hidden();
+            this.c.update();
+        });
+    }
 }

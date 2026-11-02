@@ -100,7 +100,7 @@ function loadLayout(): HomeCard[] {
                             {{ lateInvs().length }} {{ lateInvs().length > 1 ? 'faturas vencidas' : 'fatura vencida' }}
                         }
                     </b>
-                    — {{ late().sum + lateInvSum() | brl }}. Toque para ver e marcar como pago.</span
+                    — {{ abs(late().sum + lateInvSum()) | brl }}. Toque para ver e marcar como pago.</span
                 ><g-icon name="chevron_right"
             /></a>
         }

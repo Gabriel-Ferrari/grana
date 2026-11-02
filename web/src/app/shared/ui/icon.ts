@@ -61,6 +61,8 @@ const UI = [
     'link',
     'content_copy',
     'delete_sweep',
+    'arrow_forward',
+    'donut_large',
     'event_repeat',
     'splitscreen',
     'savings',

@@ -9,6 +9,8 @@ import { pluggySync } from './features/banks/open-finance';
 const NAV = [
     { to: '/', label: 'Início', icon: 'home', exact: true },
     { to: '/lancamentos', label: 'Lançamentos', icon: 'receipt_long' },
+    // 3º item = aba do celular ao lado do "+"; o resto vai para o menu Mais
+    { to: '/balanco', label: 'Balanço', icon: 'balance' },
     { to: '/cartoes', label: 'Cartões', icon: 'credit_card' },
     { to: '/relatorios', label: 'Relatórios', icon: 'bar_chart' },
     { to: '/limites', label: 'Limites', icon: 'track_changes' },
