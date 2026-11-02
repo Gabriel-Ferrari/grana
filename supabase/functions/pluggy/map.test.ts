@@ -44,6 +44,22 @@ test('reconcilia com lançamento de notificação (mesmo valor, ±2 dias)', () =
   assert.deepEqual(inserts.map((r) => r.ext_id), ['pluggy:2']);
 });
 
+test('não duplica o que veio do import do Organizze', () => {
+  const rows = [{ ext_id: 'pluggy:9', amount: -6500, date: '2026-10-31' }, { ext_id: 'pluggy:10', amount: -4000, date: '2026-10-31' }];
+  const existing = [{ id: 'o1', amount: -6500, date: '2026-10-30', ext_id: 'org:tx:123' }];
+  const { merges, inserts, skipped } = reconcile(rows, existing);
+  assert.deepEqual(merges, []);
+  assert.equal(skipped, 1);
+  assert.deepEqual(inserts.map((r) => r.ext_id), ['pluggy:10']);
+});
+
+test('baixa automática da poupança vira transferência (não é receita)', () => {
+  const r = toRow(tx({ id: 'p1', type: 'CREDIT', amount: 1349.69, description: 'BAIXA AUTOMAT POUPANCA* - DO' }), ctxAcc)!;
+  assert.ok(r.transfer_id);
+  assert.equal(r.transfer_id, toRow(tx({ id: 'p1', type: 'CREDIT', amount: 1349.69, description: 'BAIXA AUTOMAT POUPANCA* - DO' }), ctxAcc)!.transfer_id);
+  assert.equal(toRow(tx({ id: 'p2', description: 'LELLO CONDOMINIOS LTDA', amount: -1349.69 }), ctxAcc)!.transfer_id, null);
+});
+
 test('categoria da Pluggy -> categoria do grana', () => {
   const cats = [{ id: 'c1', name: 'Mercado', kind: 'expense' }, { id: 'c2', name: 'Salário', kind: 'income' }];
   assert.equal(mapCategory('Groceries', 'expense', cats), 'c1');

@@ -1,8 +1,7 @@
 import { Component, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Store, Tx, addMonths, brl, catIcon, must, notify, sb, today } from './core';
-import { DatePick, Keypad, Money } from './fields';
-import { BankLogo } from './banks';
+import { ChipOption, ChipSelect, DatePick, Keypad, Money } from './fields';
 import { Icon } from './icon';
 
 export type TxKind = 'expense' | 'income' | 'transfer';
@@ -11,7 +10,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
 
 @Component({
   selector: 'tx-form',
-  imports: [FormsModule, Icon, Money, DatePick, Keypad, BankLogo],
+  imports: [FormsModule, Icon, Money, DatePick, Keypad, ChipSelect],
   template: `
     <div class="scrim" (click)="close.emit(null)"></div>
     <form class="drawer tx" [attr.data-kind]="kind()" (ngSubmit)="save()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
@@ -41,43 +40,27 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
         @if (f.repeat === 'parcelado' && f.cents) { <small class="tx-paid">{{ f.times }}× de {{ fmt(f.cents / f.times) }}</small> }
       </div>
 
-      @if (keypad()) {
-        <g-keypad (key)="$event < 0 ? money()?.back() : money()?.press($event)" (done)="keypad.set(false)" />
-      } @else {
-      <div class="body tx-body">
+      <div class="body tx-body" (pointerdown)="keypad.set(false)">
         @if (kind() !== 'transfer') {
           <label class="tx-row"><span class="lbl">Descrição</span>
-            <span class="tx-val"><g-icon name="edit" class="muted" /><input name="d" [(ngModel)]="f.description" (ngModelChange)="suggestSoon()" required placeholder="Adicione a descrição" autocomplete="off" /></span>
+            <span class="tx-val"><g-icon name="edit" class="muted" /><input class="bare" name="d" [(ngModel)]="f.description" (ngModelChange)="suggestSoon()" required placeholder="Adicione a descrição" autocomplete="off" /></span>
           </label>
           @if (hint(); as h) {
             <button type="button" class="suggest" (click)="f.category_id = h.id; hint.set(null)"><g-icon name="auto_awesome" />Usar categoria {{ h.name }}</button>
           }
-          <label class="tx-row"><span class="lbl">Categoria</span>
-            <span class="tx-val"><span class="cat-ico round" [style.--cc]="catColor()"><span class="ms">{{ catIconName() }}</span></span>
-              <select name="c" [(ngModel)]="f.category_id">
-                <option value="">Sem categoria</option>
-                @for (c of cats(); track c.id) { <option [value]="c.id">{{ c.parent_id ? '— ' : '' }}{{ c.name }}</option> }
-              </select></span>
-          </label>
-          <label class="tx-row"><span class="lbl">{{ kind() === 'income' ? 'Recebido em' : 'Pago com' }}</span>
-            <span class="tx-val"><g-bank [name]="originName()" [institution]="originInstitution()" [size]="38" [fallback]="f.origin.startsWith('c:') ? 'credit_card' : 'account_balance'" />
-              <select name="o" [(ngModel)]="f.origin" required>
-                <optgroup label="Contas">@for (a of accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }</optgroup>
-                <optgroup label="Cartões de crédito">@for (c of cards(); track c.id) { <option [value]="'c:' + c.id">{{ c.name }}</option> }</optgroup>
-              </select></span>
-          </label>
+          <div class="tx-row"><span class="lbl">Categoria</span>
+            <g-chip-select variant="row" label="Categoria" placeholder="Sem categoria" [options]="catOptions()" [(value)]="f.category_id" />
+          </div>
+          <div class="tx-row"><span class="lbl">{{ kind() === 'income' ? 'Recebido em' : 'Pago com' }}</span>
+            <g-chip-select variant="row" [label]="kind() === 'income' ? 'Recebido em' : 'Pago com'" [options]="originOptions()" [(value)]="f.origin" [clearable]="false" fallbackIcon="account_balance" />
+          </div>
         } @else {
-          <label class="tx-row"><span class="lbl">Saiu de</span>
-            <span class="tx-val"><g-bank [name]="originName()" [size]="38" /><select name="o" [(ngModel)]="f.origin" required>
-              @for (a of accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }
-            </select></span>
-          </label>
-          <label class="tx-row"><span class="lbl">Entrou em</span>
-            <span class="tx-val"><g-bank [name]="toName()" [size]="38" /><select name="to" [(ngModel)]="f.to" required>
-              <option value="" disabled>Escolha a conta</option>
-              @for (a of accounts(); track a.id) { <option [value]="a.id">{{ a.name }}</option> }
-            </select></span>
-          </label>
+          <div class="tx-row"><span class="lbl">Saiu de</span>
+            <g-chip-select variant="row" label="Saiu de" [options]="accountOptions('a:')" [(value)]="f.origin" [clearable]="false" fallbackIcon="account_balance" />
+          </div>
+          <div class="tx-row"><span class="lbl">Entrou em</span>
+            <g-chip-select variant="row" label="Entrou em" placeholder="Escolha a conta" [options]="accountOptions('')" [(value)]="f.to" [clearable]="false" fallbackIcon="account_balance" />
+          </div>
         }
 
         <div class="tx-row"><span class="lbl">Data</span><g-date [(value)]="f.date" /></div>
@@ -89,7 +72,11 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                 <button type="button" class="pill" [class.on]="f.repeat === 'fixo'" (click)="f.repeat = f.repeat === 'fixo' ? 'none' : 'fixo'"><g-icon name="repeat" [size]="18" />Fixo</button>
                 <button type="button" class="pill" [class.on]="f.repeat === 'parcelado'" (click)="f.repeat = f.repeat === 'parcelado' ? 'none' : 'parcelado'"><g-icon name="credit_card" [size]="18" />Parcelado</button>
                 @if (f.repeat === 'parcelado') {
-                  <span class="row" style="gap:.4rem"><input name="n" type="number" inputmode="numeric" min="2" max="72" [(ngModel)]="f.times" style="width:5.5rem" aria-label="Parcelas" />vezes</span>
+                  <span class="stepper">
+                    <button type="button" (click)="f.times = Math.max(2, f.times - 1)" aria-label="Menos parcelas">−</button>
+                    <b>{{ f.times }}×</b>
+                    <button type="button" (click)="f.times = Math.min(72, f.times + 1)" aria-label="Mais parcelas">+</button>
+                  </span>
                 }
               </div>
               @if (f.repeat === 'fixo') { <small class="muted">Repete todo mês pelos próximos 12 meses.</small> }
@@ -100,12 +87,18 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
           </button>
           <div class="more-fields" [class.open]="more()">
             <div>
-              <label class="tx-row"><span class="lbl">Tags</span><span class="tx-val"><g-icon name="sell" class="muted" /><input name="t" [(ngModel)]="f.tags" placeholder="viagem, presente…" /></span></label>
-              <label class="tx-row"><span class="lbl">Observação</span><textarea name="obs" rows="2" [(ngModel)]="f.notes"></textarea></label>
+              <label class="tx-row"><span class="lbl">Tags</span><span class="tx-val"><g-icon name="sell" class="muted" /><input class="bare" name="t" [(ngModel)]="f.tags" placeholder="viagem, presente…" /></span></label>
+              <label class="tx-row"><span class="lbl">Observação</span><span class="tx-val"><g-icon name="notes" class="muted" /><textarea class="bare" name="obs" rows="2" [(ngModel)]="f.notes" placeholder="Opcional"></textarea></span></label>
             </div>
           </div>
         }
       </div>
+
+      @if (keypad()) {
+        <div class="keypad-sheet">
+          <span class="grabber"></span>
+          <g-keypad (key)="$event < 0 ? money()?.back() : money()?.press($event)" (done)="keypad.set(false)" />
+        </div>
       }
 
       <footer>
@@ -115,11 +108,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             @if (draft().group_id) { <button type="button" class="btn ghost danger" (click)="remove(true)">e próximos</button> }
           }
         </div>
-        @if (keypad()) {
-          <button type="button" class="btn save" (click)="keypad.set(false)" [disabled]="!f.cents">Continuar<g-icon name="chevron_right" [size]="20" /></button>
-        } @else {
-          <button class="btn save" [disabled]="busy() || !f.cents"><g-icon name="check" [size]="22" />Salvar</button>
-        }
+        <button class="btn save" [disabled]="busy() || !f.cents"><g-icon name="check" [size]="22" />Salvar</button>
       </footer>
     </form>
   `,
@@ -166,6 +155,19 @@ export class TxForm implements OnInit {
   }
   toName() { return this.store.originName().get(this.f.to) ?? ''; }
   openKeypad() { this.keypad.set(true); }
+  Math = Math;
+  catOptions(): ChipOption[] {
+    return this.cats().map((c) => ({ value: c.id, label: c.name, icon: catIcon(c), color: c.color, sub: !!c.parent_id }));
+  }
+  originOptions(): ChipOption[] {
+    return [
+      ...this.accounts().map((a) => ({ value: 'a:' + a.id, label: a.name, group: 'Contas', bank: { name: a.name, institution: a.institution } })),
+      ...this.cards().map((c) => ({ value: 'c:' + c.id, label: c.name, group: 'Cartões de crédito', bank: { name: c.name, institution: c.institution } })),
+    ];
+  }
+  accountOptions(prefix: string): ChipOption[] {
+    return this.accounts().map((a) => ({ value: prefix + a.id, label: a.name, bank: { name: a.name, institution: a.institution } }));
+  }
   catColor() { return this.store.catById().get(this.f.category_id)?.color ?? 'var(--muted)'; }
   catIconName() { return this.f.category_id ? catIcon(this.store.catById().get(this.f.category_id)) : 'category'; }
 

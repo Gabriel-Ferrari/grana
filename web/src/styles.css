@@ -510,3 +510,82 @@ details.guide code { background: var(--sunk); padding: .1rem .35rem; border-radi
 .keypad .k-back, .keypad .k-done { border-color: transparent; color: var(--ink-2); }
 .keypad .k-done { color: var(--k-text); }
 button, a { -webkit-tap-highlight-color: transparent; }
+
+/* ───────── barra inferior com + central (não cobre conteúdo) ───────── */
+@media (max-width: 860px) {
+  .tabbar { align-items: end; }
+  .tab-add { padding: 0 !important; }
+  .tab-add span { display: grid; place-items: center; width: 56px; height: 56px; margin-top: -22px; border-radius: 20px; background: var(--lime); color: var(--on-lime);
+    box-shadow: 0 8px 22px -8px oklch(40% 0.12 130 / .6), 0 0 0 5px var(--paper); transition: transform .2s var(--ease); }
+  .tab-add:active span { transform: scale(.92); }
+}
+
+/* ───────── filtros em chip + folha de opções ───────── */
+.chips-row { display: flex; gap: .5rem; overflow-x: auto; padding: .1rem .1rem .3rem; scrollbar-width: none; }
+.chips-row::-webkit-scrollbar { display: none; }
+.fchip-wrap { position: relative; flex: none; display: block; }
+.fchip { display: inline-flex; align-items: center; gap: .4rem; height: 40px; padding: 0 .75rem 0 .9rem; border-radius: 999px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink-2); font-weight: 650; font-size: .9rem; white-space: nowrap; cursor: pointer; transition: all .2s var(--ease); }
+.fchip:hover { border-color: color-mix(in oklch, var(--brand) 40%, var(--line)); }
+.fchip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.fchip .caret { font-size: 18px; opacity: .7; }
+.fchip-ico { font-size: 18px; }
+.fchip.clear { color: var(--danger); }
+.fchip .bank-logo { border: 0; }
+.fpop-scrim { position: fixed; inset: 0; z-index: 30; }
+.fpop { position: absolute; z-index: 31; top: calc(100% + 6px); left: 0; min-width: 280px; max-width: min(360px, 92vw); max-height: 400px; overflow: auto;
+  padding: .5rem; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px -20px oklch(20% 0.05 160 / .4); animation: rise .2s var(--ease); }
+.fpop-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem .5rem .4rem; }
+.fpop .search { margin: 0 .3rem .4rem; }
+.fpop-list { display: flex; flex-direction: column; }
+.fgroup { font-size: .72rem; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); padding: .7rem .7rem .3rem; }
+.fopt { display: flex; align-items: center; gap: .75rem; min-height: 52px; padding: .45rem .7rem; border: 0; border-radius: 12px; background: transparent; text-align: left; font-size: 1rem; font-weight: 600; color: var(--ink); cursor: pointer; }
+.fopt:hover { background: var(--sunk); }
+.fopt.sub { padding-left: 2.2rem; font-weight: 550; }
+.fopt.on { background: color-mix(in oklch, var(--brand) 12%, var(--surface)); }
+.fopt.on::after { content: 'check'; font-family: 'Material Symbols Rounded'; margin-left: auto; color: var(--brand); font-size: 20px; }
+@media (max-width: 860px) {
+  .fpop-scrim { background: oklch(18% 0.02 165 / .35); }
+  .fpop { position: fixed; top: auto; left: 0; right: 0; bottom: 0; max-width: none; max-height: 78dvh; border-radius: 24px 24px 0 0; padding: .6rem .6rem calc(1rem + env(safe-area-inset-bottom)); animation: sheet-up .32s var(--ease); }
+}
+.frow { display: flex; align-items: center; gap: .9rem; width: 100%; min-height: 52px; padding: 0; border: 0; background: transparent; cursor: pointer; text-align: left; color: var(--ink); }
+.frow-val { flex: 1; font-size: 1.12rem; font-weight: 600; }
+.frow-val.placeholder { color: var(--muted); font-weight: 500; }
+.frow .caret { color: var(--muted); }
+.frow .bank-logo { border-radius: 50%; }
+.drawer .fpop { position: fixed; }
+@media (min-width: 861px) { .drawer .fpop { position: absolute; left: 0; right: 0; max-width: none; } }
+
+/* ───────── linhas do formulário sem cara de input ───────── */
+.bare { border: 0 !important; background: transparent !important; box-shadow: none !important; padding: .2rem 0 !important; min-height: 44px; font-size: 1.12rem !important; font-weight: 600; color: var(--ink); }
+.bare::placeholder { color: var(--muted); font-weight: 500; }
+textarea.bare { min-height: 44px; resize: none; }
+.tx-row:focus-within { border-bottom-color: var(--k); }
+.tx-row .lbl { font-size: .82rem !important; font-weight: 650 !important; color: var(--muted) !important; text-transform: none; }
+.stepper { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--line); border-radius: 14px; padding: 3px; }
+.stepper button { width: 40px; height: 40px; border: 0; border-radius: 11px; background: var(--sunk); font-size: 1.3rem; font-weight: 700; cursor: pointer; }
+.stepper b { min-width: 3ch; text-align: center; font-variant-numeric: tabular-nums; }
+/* transferência com contraste nos dois temas */
+.drawer.tx[data-kind='transfer'] { --k: oklch(48% 0.09 255); --k-text: oklch(45% 0.09 255); }
+.drawer.tx[data-kind='transfer'] .tx-head { background: oklch(40% 0.08 255); color: white; }
+.drawer.tx[data-kind='transfer'] .tx-amount .money-input { color: white !important; }
+.drawer.tx[data-kind='transfer'] .btn.save { color: white; background: oklch(46% 0.1 255); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .drawer.tx[data-kind='transfer'] { --k-text: oklch(78% 0.08 255); } }
+:root[data-theme='dark'] .drawer.tx[data-kind='transfer'] { --k-text: oklch(78% 0.08 255); }
+/* teclado como folha sobre os campos (some ao tocar num campo) */
+.drawer.tx { position: fixed; }
+.keypad-sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; padding: .4rem 0 calc(.6rem + env(safe-area-inset-bottom)); background: var(--surface);
+  border-radius: 24px 24px 0 0; box-shadow: 0 -18px 40px -18px oklch(15% 0.03 160 / .45); animation: sheet-up .3s var(--ease); }
+.keypad-sheet .grabber { display: block; width: 44px; height: 5px; border-radius: 3px; background: var(--line); margin: .2rem auto .3rem; }
+.keypad-sheet .keypad { padding: .6rem 1.4rem 1rem; gap: .7rem; }
+
+/* ───────── lançamentos: barra compacta ───────── */
+.tx-toolbar { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
+.month-pill { display: inline-flex; align-items: center; gap: .1rem; padding: 3px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.month-pill b { min-width: 8.5rem; text-align: center; font-size: 1rem; }
+.month-pill b::first-letter { text-transform: uppercase; }
+.month-pill .btn { border-radius: 999px; }
+.search.grow-in { min-width: 220px; animation: rise .2s var(--ease); }
+.sum-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; padding: .85rem 1.1rem; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
+.sum-strip span { display: block; font-size: .74rem; font-weight: 650; color: var(--muted); }
+.sum-strip b { font-size: clamp(.95rem, 2.6vw, 1.15rem); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }

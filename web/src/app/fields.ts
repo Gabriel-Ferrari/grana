@@ -1,6 +1,7 @@
 import { Component, ElementRef, HostListener, computed, input, model, output, signal, viewChild } from '@angular/core';
 import { addMonths, today } from './core';
 import { Icon } from './icon';
+import { BankLogo } from './banks';
 
 /** Valor em reais digitado a partir dos centavos, como no Organizze: 1 → 0,01 · 12 → 0,12 · 1234 → 12,34.
  *  Funciona com teclado virtual (lê os dígitos no evento input, não depende de keydown). */
@@ -116,4 +117,73 @@ export class DatePick {
   }
   @HostListener('keydown.escape', ['$event'])
   esc(e: Event) { if (this.open()) { e.stopPropagation(); this.open.set(false); } }
+}
+
+export interface ChipOption { value: string; label: string; icon?: string; color?: string; bank?: { name: string; institution?: string | null }; group?: string; sub?: boolean }
+
+/** Filtro em chip (estilo Organizze/Copilot): mostra o selecionado; abre lista de opções em chips
+ *  (popover no desktop, folha de baixo no celular). Sem <select> genérico. */
+@Component({
+  selector: 'g-chip-select',
+  imports: [BankLogo],
+  template: `
+    @if (variant() === 'row') {
+      <button type="button" class="frow" (click)="open.set(!open())" [attr.aria-expanded]="open()" [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')">
+        @if (current()?.bank; as b) { <g-bank [name]="b.name" [institution]="b.institution" [size]="40" [fallback]="fallbackIcon()" /> }
+        @else { <span class="cat-ico round" [style.--cc]="current()?.color ?? 'var(--muted)'"><span class="ms">{{ current()?.icon ?? fallbackIcon() }}</span></span> }
+        <span class="frow-val" [class.placeholder]="!current()">{{ current()?.label ?? placeholder() }}</span>
+        <span class="ms caret">chevron_right</span>
+      </button>
+    } @else {
+      <button type="button" class="fchip" [class.on]="!!value()" (click)="open.set(!open())" [attr.aria-expanded]="open()" [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')">
+        @if (current(); as c) {
+          @if (c.bank) { <g-bank [name]="c.bank.name" [institution]="c.bank.institution" [size]="20" /> }
+          @else if (c.icon) { <span class="ms fchip-ico" [style.color]="c.color">{{ c.icon }}</span> }
+          <span>{{ c.label }}</span>
+        } @else { <span>{{ label() }}</span> }
+        <span class="ms caret">expand_more</span>
+      </button>
+    }
+    @if (open()) {
+      <div class="fpop-scrim" (click)="open.set(false)"></div>
+      <div class="fpop" role="listbox" [attr.aria-label]="label()">
+        <div class="fpop-head"><b>{{ label() }}</b>
+          @if (value() && clearable()) { <button type="button" class="btn ghost" (click)="pick('')">Limpar</button> }
+          <button type="button" class="btn ghost icon" (click)="open.set(false)" aria-label="Fechar"><span class="ms">close</span></button></div>
+        @if (options().length > 8) {
+          <div class="search"><span class="ms">search</span><input [value]="q()" (input)="q.set($any($event.target).value)" placeholder="Buscar" /></div>
+        }
+        <div class="fpop-list">
+          @for (o of filtered(); track o.value; let i = $index) {
+            @if (o.group && o.group !== filtered()[i - 1]?.group) { <div class="fgroup">{{ o.group }}</div> }
+            <button type="button" role="option" class="fopt" [class.sub]="o.sub" [class.on]="o.value === value()" [attr.aria-selected]="o.value === value()" (click)="pick(o.value)">
+              @if (o.bank) { <g-bank [name]="o.bank.name" [institution]="o.bank.institution" [size]="26" /> }
+              @else if (o.icon) { <span class="cat-ico sm" [style.--cc]="o.color"><span class="ms">{{ o.icon }}</span></span> }
+              <span>{{ o.label }}</span>
+            </button>
+          }
+        </div>
+      </div>
+    }
+  `,
+  host: { class: 'fchip-wrap' },
+})
+export class ChipSelect {
+  label = input('');
+  options = input<ChipOption[]>([]);
+  /** 'chip' = filtro compacto; 'row' = linha grande de formulário (como no Organizze) */
+  variant = input<'chip' | 'row'>('chip');
+  placeholder = input('Escolher');
+  fallbackIcon = input('category');
+  clearable = input(true);
+  value = model('');
+  open = signal(false);
+  q = signal('');
+  current = computed(() => this.options().find((o) => o.value === this.value()));
+  filtered = computed(() => {
+    const q = this.q().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return this.options().filter((o) => !q || o.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
+  });
+  pick(v: string) { this.value.set(v); this.open.set(false); this.q.set(''); }
+  @HostListener('keydown.escape') esc() { this.open.set(false); }
 }

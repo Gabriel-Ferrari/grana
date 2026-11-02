@@ -26,7 +26,7 @@ const pget = async (key: string, path: string) => {
 const brDate = (iso: string) => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
 async function syncUser(user_id: string, key: string) {
-  const out = { items: 0, accounts: 0, inserted: 0, merged: 0, errors: [] as string[] };
+  const out = { items: 0, accounts: 0, inserted: 0, merged: 0, skipped: 0, errors: [] as string[] };
   const { data: items } = await db.from('pluggy_items').select('*').eq('user_id', user_id);
   const { data: cats } = await db.from('categories').select('id, name, kind').eq('user_id', user_id);
 
@@ -51,11 +51,13 @@ async function syncUser(user_id: string, key: string) {
       const from = brDate(new Date(it.last_sync_at ? Date.parse(it.last_sync_at) - 10 * 864e5 : Date.now() - 90 * 864e5).toISOString());
       for (const m of mapped ?? []) {
         out.accounts++;
+        // /v2/transactions (paginação por cursor; o /transactions antigo responde 410)
         const txs: PluggyTx[] = [];
-        for (let page = 1; ; page++) {
-          const r = await pget(key, `/transactions?accountId=${m.id}&from=${from}&pageSize=500&page=${page}`);
-          txs.push(...r.results);
-          if (page >= (r.totalPages ?? 1)) break;
+        let path: string | null = `/v2/transactions?accountId=${m.id}&dateFrom=${from}`;
+        for (let guard = 0; path && guard < 50; guard++) {
+          const r = await pget(key, path);
+          txs.push(...(r.results ?? []));
+          path = r.next ? (String(r.next).startsWith('/v2/') ? r.next : `/v2/transactions${r.next}`) : null;
         }
         // pagamento de fatura na conta -> liga ao cartão do mesmo banco (um item = um banco no MeuPluggy)
         const invoices = cardOfItem.length === 1
@@ -66,7 +68,7 @@ async function syncUser(user_id: string, key: string) {
 
         // categoria: a última usada com a mesma descrição; senão a categoria da Pluggy traduzida
         for (const r of rows) {
-          if (r.pays_card_id) continue;
+          if (r.pays_card_id || r.transfer_id) continue;
           const { data: prev } = await db.from('transactions').select('category_id').eq('user_id', user_id)
             .ilike('description', r.description.replace(/[%_\\]/g, '\\$&')).not('category_id', 'is', null).limit(1).maybeSingle();
           r.category_id = prev?.category_id ?? mapCategory(r._pluggyCategory, r.amount > 0 ? 'income' : 'expense', cats ?? []);
@@ -78,7 +80,10 @@ async function syncUser(user_id: string, key: string) {
         let q = db.from('transactions').select('id, amount, date, ext_id').eq('user_id', user_id).gte('date', lo).lte('date', hi);
         q = m.card_id ? q.eq('card_id', m.card_id) : q.eq('account_id', m.account_id);
         const { data: existing } = await q;
-        const { merges, inserts } = reconcile(rows, existing ?? []);
+        const { merges, inserts, skipped, confirmed } = reconcile(rows, existing ?? []);
+        out.skipped += skipped;
+        // o banco confirmou: o que estava "a pagar" vira pago
+        if (confirmed.length) await db.from('transactions').update({ paid: true }).in('id', confirmed).eq('paid', false);
         for (const mg of merges) {
           await db.from('transactions').update({ ext_id: mg.ext_id }).eq('id', mg.id).is('ext_id', null);
         }

@@ -99,8 +99,10 @@ export class OpenFinance {
     this.accounts.set(a as PAccount[]);
     // sugere o destino de contas novas pelo banco (ex.: "Nubank" -> conta/cartão Nubank)
     for (const acc of (a as PAccount[]).filter((x) => !x.account_id && !x.card_id && !x.ignored)) {
+      const byLast4 = acc.type === 'CREDIT' ? this.store.cards().find((c) => c.last4 && acc.number?.endsWith(c.last4)) : undefined;
+      if (byLast4) { await this.map(acc, 'c:' + byLast4.id, true); continue; }
       const bank = bankOf(acc.name);
-      if (!bank) continue;
+      if (!bank || acc.subtype === 'SAVINGS_ACCOUNT') continue; // poupança: o usuário decide
       const pool = acc.type === 'CREDIT' ? this.store.cards() : this.store.accounts();
       const match = pool.filter((p) => bankOf(p.name, (p as { institution?: string | null }).institution)?.id === bank.id);
       if (match.length === 1) await this.map(acc, (acc.type === 'CREDIT' ? 'c:' : 'a:') + match[0].id, true);

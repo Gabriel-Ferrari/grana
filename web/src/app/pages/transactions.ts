@@ -3,37 +3,42 @@ import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { BrlPipe, Store, Tx, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../core';
 import { Icon } from '../icon';
+import { ChipOption, ChipSelect } from '../fields';
 
 @Component({
-  imports: [BrlPipe, FormsModule, Icon],
+  imports: [BrlPipe, FormsModule, Icon, ChipSelect],
   template: `
-    <div class="page-title reveal">
-      <h1>Lançamentos</h1>
-      <div class="month-nav">
+    <div class="tx-toolbar reveal">
+      <div class="month-pill" role="group" aria-label="Mês">
         <button class="btn ghost icon" (click)="go(-1)" aria-label="Mês anterior"><g-icon name="chevron_left" /></button>
         <b>{{ label() }}</b>
         <button class="btn ghost icon" (click)="go(1)" aria-label="Próximo mês"><g-icon name="chevron_right" /></button>
       </div>
-    </div>
-
-    <div class="row wrap reveal">
-      <div class="search"><g-icon name="search" /><input id="search" placeholder="Buscar descrição ou tag  ( / )" [ngModel]="q()" (ngModelChange)="q.set($event)" /></div>
-      <select style="width:auto" [ngModel]="origin()" (ngModelChange)="setParam('o', $event)" aria-label="Conta ou cartão">
-        <option value="">Todas as contas e cartões</option>
-        <optgroup label="Contas">@for (a of store.accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }</optgroup>
-        <optgroup label="Cartões">@for (c of store.cards(); track c.id) { <option [value]="'c:' + c.id">{{ c.name }}</option> }</optgroup>
-      </select>
-      <select style="width:auto" [ngModel]="catSel()" (ngModelChange)="setParam('cat', $event)" aria-label="Categoria">
-        <option value="">Todas as categorias</option>
-        <option value="none">Sem categoria</option>
-        @for (c of store.categories(); track c.id) { <option [value]="c.id">{{ c.name }}</option> }
-      </select>
-      <div class="seg">
-        <button [class.on]="kind() === ''" (click)="kind.set('')">Tudo</button>
-        <button [class.on]="kind() === 'out'" (click)="kind.set('out')">Saídas</button>
-        <button [class.on]="kind() === 'in'" (click)="kind.set('in')">Entradas</button>
+      <div class="row" style="gap:.4rem">
+        @if (searching() || q()) {
+          <div class="search grow-in"><g-icon name="search" /><input id="search" placeholder="Buscar descrição ou tag" [ngModel]="q()" (ngModelChange)="q.set($event)" (blur)="!q() && searching.set(false)" /></div>
+        } @else {
+          <button class="btn ghost icon" (click)="openSearch()" aria-label="Buscar (/)" title="Buscar (/)"><g-icon name="search" /></button>
+        }
+        <button class="btn primary hide-m" (click)="store.open({ kind: 'expense' })"><g-icon name="add" [size]="18" />Lançamento</button>
       </div>
     </div>
+
+    <div class="chips-row reveal" role="toolbar" aria-label="Filtros">
+      <g-chip-select label="Contas e cartões" [options]="originOptions()" [value]="origin()" (valueChange)="setParam('o', $event)" />
+      <g-chip-select label="Tipo" [options]="kindOptions" [value]="kind()" (valueChange)="kind.set($any($event))" />
+      <g-chip-select label="Categoria" [options]="catOptions()" [value]="catSel()" (valueChange)="setParam('cat', $event)" />
+      <g-chip-select label="Situação" [options]="paidOptions" [value]="paidSel()" (valueChange)="paidSel.set($any($event))" />
+      @if (origin() || kind() || catSel() || paidSel() || q()) {
+        <button class="fchip clear" (click)="clearAll()"><span class="ms">close</span>Limpar</button>
+      }
+    </div>
+
+    <section class="sum-strip reveal">
+      <div><span>Entradas</span><b class="pos">{{ totals().inc | brl }}</b></div>
+      <div><span>Saídas</span><b class="neg">{{ -totals().exp | brl }}</b></div>
+      <div><span>Resultado</span><b [class.neg]="totals().inc + totals().exp < 0">{{ totals().inc + totals().exp | brl }}</b></div>
+    </section>
 
     <section class="panel reveal" [class.loading]="loading()">
       @for (g of groups(); track g.date) {
@@ -71,11 +76,6 @@ import { Icon } from '../icon';
             Aperte <kbd>D</kbd> para despesa, <kbd>R</kbd> para receita, ou ative o coletor no celular para lançar sozinho.</div>
         </div>
       }
-      <div class="totals">
-        <span>Entradas <b class="pos">{{ totals().inc | brl }}</b></span>
-        <span>Saídas <b class="neg">{{ -totals().exp | brl }}</b></span>
-        <span>Resultado <b [class.neg]="totals().inc + totals().exp < 0">{{ totals().inc + totals().exp | brl }}</b></span>
-      </div>
     </section>
   `,
 })
@@ -90,7 +90,20 @@ export class Transactions {
   catSel = computed(() => this.cat() ?? '');
   origin = computed(() => this.o() ?? '');
   q = signal('');
+  searching = signal(false);
   kind = signal<'' | 'in' | 'out'>('');
+  paidSel = signal<'' | 'paid' | 'open'>('');
+  kindOptions: ChipOption[] = [{ value: 'out', label: 'Saídas', icon: 'arrow_upward', color: 'var(--out)' }, { value: 'in', label: 'Entradas', icon: 'arrow_downward', color: 'var(--in)' }];
+  paidOptions: ChipOption[] = [{ value: 'paid', label: 'Pagos', icon: 'thumb_up', color: 'var(--in)' }, { value: 'open', label: 'Pendentes', icon: 'schedule', color: 'var(--warn)' }];
+  originOptions = computed<ChipOption[]>(() => [
+    ...this.store.accounts().filter((a) => !a.archived).map((a) => ({ value: 'a:' + a.id, label: a.name, group: 'Contas', bank: { name: a.name, institution: a.institution } })),
+    ...this.store.cards().filter((c) => !c.archived).map((c) => ({ value: 'c:' + c.id, label: c.name, group: 'Cartões', bank: { name: c.name, institution: c.institution } })),
+  ]);
+  catOptions = computed<ChipOption[]>(() => [
+    { value: 'none', label: 'Sem categoria', icon: 'category' },
+    ...this.store.categories().filter((c) => !c.archived).map((c) => ({ value: c.id, label: c.name, icon: catIcon(c), color: c.color, group: c.kind === 'income' ? 'Entradas' : 'Saídas', sub: !!c.parent_id }))
+      .sort((a, b) => (a.group! > b.group! ? -1 : a.group! < b.group! ? 1 : 0)),
+  ]);
   rows = signal<Tx[]>([]);
   loading = signal(true);
 
@@ -104,7 +117,8 @@ export class Transactions {
     return this.rows().filter((t) =>
       (!q || t.description.toLowerCase().includes(q) || t.tags.some((g) => g.toLowerCase().includes(q))) &&
       (!cat || (cat === 'none' ? !t.category_id && !t.transfer_id && !t.pays_card_id : t.category_id === cat || byId.get(t.category_id ?? '')?.parent_id === cat)) &&
-      (!k || (k === 'in' ? t.amount > 0 : t.amount < 0)));
+      (!k || (k === 'in' ? t.amount > 0 : t.amount < 0)) &&
+      (!this.paidSel() || (this.paidSel() === 'paid' ? t.paid : !t.paid)));
   });
   groups = computed(() => {
     const m = new Map<string, Tx[]>();
@@ -139,6 +153,11 @@ export class Transactions {
 
   setParam(key: string, value: string) {
     this.router.navigate([], { queryParams: { [key]: value || null }, queryParamsHandling: 'merge', replaceUrl: true });
+  }
+  openSearch() { this.searching.set(true); setTimeout(() => document.getElementById('search')?.focus()); }
+  clearAll() {
+    this.kind.set(''); this.paidSel.set(''); this.q.set(''); this.searching.set(false);
+    this.router.navigate([], { queryParams: { o: null, cat: null }, queryParamsHandling: 'merge', replaceUrl: true });
   }
   go(n: number) {
     this.setParam('m', addMonths(this.month(), n).slice(0, 7));

@@ -97,20 +97,21 @@ const NAV = [
       <main><router-outlet /></main>
 
       <nav class="tabbar" aria-label="Principal">
-        @for (n of nav.slice(0, 4); track n.to) {
+        @for (n of nav.slice(0, 2); track n.to) {
           <a [routerLink]="n.to" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: !!n.exact }"><g-icon [name]="n.icon" [size]="24" />{{ n.label }}</a>
         }
+        <button class="tab-add" (click)="store.open({ kind: 'expense' })" aria-label="Novo lançamento"><span><g-icon name="add" [size]="30" /></span></button>
+        <a [routerLink]="nav[2].to" routerLinkActive="on"><g-icon [name]="nav[2].icon" [size]="24" />{{ nav[2].label }}</a>
         <button popovertarget="more-menu"><g-icon name="more_horiz" [size]="24" />Mais
           @if (store.pending()) { <span class="badge">{{ store.pending() }}</span> }</button>
       </nav>
       <div id="more-menu" popover class="more-menu">
-        @for (n of nav.slice(4); track n.to) {
+        @for (n of nav.slice(3); track n.to) {
           <a [routerLink]="n.to" (click)="hide('more-menu')"><g-icon [name]="n.icon" />{{ n.label }}
             @if (n.to === '/notificacoes' && store.pending()) { <span class="badge" style="margin-left:auto">{{ store.pending() }}</span> }</a>
         }
         <button (click)="logout()"><g-icon name="logout" />Sair</button>
       </div>
-      <button class="fab" (click)="store.open({ kind: 'expense' })" aria-label="Novo lançamento"><g-icon name="add" [size]="30" /></button>
 
       @if (store.form(); as f) { <tx-form [draft]="f.draft" (close)="closeForm($event)" /> }
       @if (store.recovery()) {
@@ -237,8 +238,8 @@ export class App {
     else if (k === 'h') toggleHidden();
     else if (k === '/') {
       e.preventDefault();
-      const focus = () => document.getElementById('search')?.focus();
-      if (document.getElementById('search')) focus();
+      const focus = () => (document.getElementById('search') ?? (document.querySelector('button[aria-label^="Buscar"]') as HTMLElement | null)?.click(), setTimeout(() => document.getElementById('search')?.focus(), 30));
+      if (location.pathname.startsWith('/lancamentos')) focus();
       else this.router.navigateByUrl('/lancamentos').then(() => setTimeout(focus, 50));
     }
   }
