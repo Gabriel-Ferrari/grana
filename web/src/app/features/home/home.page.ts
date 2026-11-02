@@ -20,12 +20,13 @@ import {
     sb,
     today,
     toggleHidden,
+    haptic,
 } from '../../core';
 import { invoiceStatus } from '../cards/invoice';
 import { Icon } from '../../shared/ui/icon';
 import { BankLogo, CardArt, bankColor } from '../../shared/banks';
 import { ChipOption, ChipSelect } from '../../shared/ui/fields';
-import { DragList } from '../../shared/ui/drag-list';
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 
 type CardId = 'ritmo' | 'onde' | 'equilibrio' | 'revisar' | 'apagar' | 'cartoes' | 'contas';
 interface HomeCard {
@@ -56,7 +57,21 @@ function loadLayout(): HomeCard[] {
 }
 
 @Component({
-    imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo, CardArt, ChipSelect, Meter, DragList],
+    imports: [
+        BrlPipe,
+        DmyPipe,
+        RouterLink,
+        Icon,
+        Pace,
+        RankBars,
+        BankLogo,
+        CardArt,
+        ChipSelect,
+        Meter,
+        CdkDropList,
+        CdkDrag,
+        CdkDragHandle,
+    ],
     template: `
         <div class="page-title reveal">
             <div>
@@ -488,20 +503,25 @@ function loadLayout(): HomeCard[] {
                     </button>
                 </header>
                 <div class="body">
-                    <p class="muted" style="margin:0">Arraste pela alça (⠿) ou use as setas. O saldo fica sempre no topo.</p>
-                    <div class="list" gDragList (reorder)="dropCard($event)">
+                    <p class="muted" style="margin:0">Segure a alça (≡) e arraste para mudar a ordem. O saldo fica sempre no topo.</p>
+                    <div class="list reorder-list" cdkDropList cdkDropListLockAxis="y" (cdkDropListDropped)="dropCard($event)">
                         @for (c of layout(); track c.id; let i = $index; let last = $last) {
-                            <div class="item custom-row" data-drag-item>
-                                <span data-drag-handle aria-hidden="true"><g-icon name="drag_indicator" [size]="20" /></span>
+                            <div class="item custom-row" cdkDrag (cdkDragStarted)="haptic()">
                                 <label class="check grow"
                                     ><input type="checkbox" [checked]="!c.hidden" (change)="toggleCard(c.id)" />{{ cardName(c.id) }}</label
                                 >
-                                <button class="btn ghost icon" (click)="moveCard(i, -1)" [disabled]="i === 0" aria-label="Subir">
-                                    <g-icon name="arrow_upward" [size]="18" />
-                                </button>
-                                <button class="btn ghost icon" (click)="moveCard(i, 1)" [disabled]="last" aria-label="Descer">
-                                    <g-icon name="arrow_downward" [size]="18" />
-                                </button>
+                                <!-- setas: alternativa por teclado (no celular fica só a alça) -->
+                                <span class="order-btns">
+                                    <button class="btn ghost icon" (click)="moveCard(i, -1)" [disabled]="i === 0" aria-label="Subir">
+                                        <g-icon name="arrow_upward" [size]="18" />
+                                    </button>
+                                    <button class="btn ghost icon" (click)="moveCard(i, 1)" [disabled]="last" aria-label="Descer">
+                                        <g-icon name="arrow_downward" [size]="18" />
+                                    </button>
+                                </span>
+                                <span class="reorder-handle" cdkDragHandle aria-hidden="true"
+                                    ><g-icon name="drag_handle" [size]="22"
+                                /></span>
                             </div>
                         }
                     </div>
@@ -635,12 +655,13 @@ export class Home {
     toggleCard(id: CardId) {
         this.saveLayout(this.layout().map((c) => (c.id === id ? { ...c, hidden: !c.hidden } : c)));
     }
-    dropCard(e: { from: number; to: number }) {
+    dropCard(e: CdkDragDrop<unknown>) {
         const l = [...this.layout()];
-        const [x] = l.splice(e.from, 1);
-        l.splice(e.to, 0, x);
+        moveItemInArray(l, e.previousIndex, e.currentIndex);
         this.saveLayout(l);
+        haptic();
     }
+    haptic = haptic;
     moveCard(i: number, d: number) {
         const l = [...this.layout()];
         [l[i], l[i + d]] = [l[i + d], l[i]];

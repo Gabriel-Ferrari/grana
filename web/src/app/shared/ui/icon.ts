@@ -65,6 +65,7 @@ const UI = [
     'donut_large',
     'history',
     'drag_indicator',
+    'drag_handle',
     'event_repeat',
     'splitscreen',
     'savings',

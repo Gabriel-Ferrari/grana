@@ -61,3 +61,8 @@ export function setSuggestPrefs(p: SuggestPrefs) {
     suggestPrefs.set(p);
     localStorage.setItem('grana.sugg', JSON.stringify(p));
 }
+
+/** vibração curtinha ao pegar/soltar ao reordenar (como o Ionic); sem suporte, não faz nada */
+export function haptic() {
+    navigator.vibrate?.(8);
+}

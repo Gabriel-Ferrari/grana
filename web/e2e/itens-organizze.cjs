@@ -57,7 +57,7 @@ async function login(page) {
         ok('subir volta', (await contasAj.locator('.title').first().innerText()) === before[0]);
         // arrastar pela alça: contas em Ajustes
         const drag = async (from, to) => {
-            const h = from.locator('[data-drag-handle]'), hb = await h.boundingBox(), tb = await to.boundingBox();
+            const h = from.locator('.reorder-handle'), hb = await h.boundingBox(), tb = await to.boundingBox();
             await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
             await page.mouse.down();
             for (let k = 1; k <= 8; k++) await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2 + (((tb.y > hb.y ? tb.y + tb.height * 0.75 : tb.y + tb.height * 0.25) - hb.y - hb.height / 2) * k) / 8);

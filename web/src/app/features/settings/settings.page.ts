@@ -1,17 +1,17 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BANKS, Bank, BankLogo, CardArt, NETWORKS, bankOf, bankPackage, networkLogo, bankName, bankColor } from '../../shared/banks';
-import { Store, authError, catIcon, must, notify, sb, toCents, today, suggestPrefs, setSuggestPrefs, byPosition } from '../../core';
+import { Store, authError, catIcon, must, notify, sb, toCents, today, suggestPrefs, setSuggestPrefs, byPosition, haptic } from '../../core';
 import { CATEGORY_ICONS, Icon } from '../../shared/ui/icon';
 import { OpenFinance } from '../banks/open-finance';
-import { DragList } from '../../shared/ui/drag-list';
+import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 
 type Kind = 'accounts' | 'cards' | 'categories';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- linhas de 3 tabelas (contas, cartões, categorias) no mesmo formulário
 type Row = Record<string, any>;
 
 @Component({
-    imports: [FormsModule, Icon, BankLogo, CardArt, OpenFinance, DragList],
+    imports: [FormsModule, Icon, BankLogo, CardArt, OpenFinance, CdkDropList, CdkDrag, CdkDragHandle],
     template: `
         <div class="page-title reveal"><h1>Ajustes</h1></div>
 
@@ -21,20 +21,23 @@ type Row = Record<string, any>;
                     <h2>Contas</h2>
                     <button class="btn" (click)="create('accounts')"><g-icon name="add" [size]="18" />Conta</button>
                 </div>
-                <div class="list" gDragList (reorder)="drop('accounts', rows().accounts, $event)">
+                <div
+                    class="list reorder-list"
+                    cdkDropList
+                    cdkDropListLockAxis="y"
+                    [cdkDropListDisabled]="!store.v3()"
+                    (cdkDropListDropped)="drop('accounts', rows().accounts, $event)"
+                >
                     @for (a of rows().accounts; track a['id']; let i = $index) {
                         <div
-                            data-drag-item
+                            cdkDrag
+                            (cdkDragStarted)="haptic()"
+                            (cdkDragEnded)="dragEnd()"
                             class="item click"
                             (click)="open('accounts', a)"
                             tabindex="0"
                             (keydown.enter)="open('accounts', a)"
                         >
-                            @if (store.v3()) {
-                                <span data-drag-handle aria-hidden="true" (click)="$event.stopPropagation()"
-                                    ><g-icon name="drag_indicator" [size]="20"
-                                /></span>
-                            }
                             <g-bank [name]="a['name']" [institution]="a['institution']" />
                             <div class="grow">
                                 <div class="title">
@@ -79,6 +82,11 @@ type Row = Record<string, any>;
                                 </span>
                             }
                             <g-icon name="chevron_right" class="muted" />
+                            @if (store.v3()) {
+                                <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
+                                    ><g-icon name="drag_handle" [size]="22"
+                                /></span>
+                            }
                         </div>
                     }
                 </div>
@@ -89,14 +97,23 @@ type Row = Record<string, any>;
                     <h2>Cartões de crédito</h2>
                     <button class="btn" (click)="create('cards')"><g-icon name="add" [size]="18" />Cartão</button>
                 </div>
-                <div class="list" gDragList (reorder)="drop('cards', rows().cards, $event)">
+                <div
+                    class="list reorder-list"
+                    cdkDropList
+                    cdkDropListLockAxis="y"
+                    [cdkDropListDisabled]="!store.v3()"
+                    (cdkDropListDropped)="drop('cards', rows().cards, $event)"
+                >
                     @for (c of rows().cards; track c['id']; let i = $index) {
-                        <div data-drag-item class="item click" (click)="open('cards', c)" tabindex="0" (keydown.enter)="open('cards', c)">
-                            @if (store.v3()) {
-                                <span data-drag-handle aria-hidden="true" (click)="$event.stopPropagation()"
-                                    ><g-icon name="drag_indicator" [size]="20"
-                                /></span>
-                            }
+                        <div
+                            cdkDrag
+                            (cdkDragStarted)="haptic()"
+                            (cdkDragEnded)="dragEnd()"
+                            class="item click"
+                            (click)="open('cards', c)"
+                            tabindex="0"
+                            (keydown.enter)="open('cards', c)"
+                        >
                             <g-card-art
                                 [name]="c['name']"
                                 [institution]="c['institution']"
@@ -150,6 +167,11 @@ type Row = Record<string, any>;
                                 </span>
                             }
                             <g-icon name="chevron_right" class="muted" />
+                            @if (store.v3()) {
+                                <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
+                                    ><g-icon name="drag_handle" [size]="22"
+                                /></span>
+                            }
                         </div>
                     }
                 </div>
@@ -538,11 +560,17 @@ export class Settings {
         return this.rows().categories.filter((x) => x['kind'] === c['kind'] && (x['parent_id'] ?? null) === (c['parent_id'] ?? null));
     }
     /** arrastar: tira de `from`, insere em `to` e grava a ordem */
-    async drop(kind: Kind, list: Row[], e: { from: number; to: number }) {
+    async drop(kind: Kind, list: Row[], e: CdkDragDrop<unknown>) {
         const l = [...list];
-        const [x] = l.splice(e.from, 1);
-        l.splice(e.to, 0, x);
+        moveItemInArray(l, e.previousIndex, e.currentIndex);
+        haptic();
         await this.savePositions(kind, l);
+    }
+    haptic = haptic;
+    /** soltar o item não deve abrir a edição dele */
+    private droppedAt = 0;
+    dragEnd() {
+        this.droppedAt = Date.now();
     }
     private async savePositions(kind: Kind, l: Row[]) {
         await Promise.all(l.map((r, pos) => (r['position'] === pos ? null : sb.from(kind).update({ position: pos }).eq('id', r['id']))));
@@ -583,6 +611,7 @@ export class Settings {
     }
 
     open(kind: Kind, r: Row) {
+        if (Date.now() - this.droppedAt < 400) return;
         this.bankQuery.set('');
         const color = kind === 'categories' ? r['color'] : (bankColor(r['name'], r['color'], r['institution']) ?? '#1f6f4a');
         const today = kind === 'accounts' ? (this.store.accounts().find((a) => a.id === r['id'])?.balance ?? 0) / 100 : null;
