@@ -1,4 +1,4 @@
-import { Component, ElementRef, HostListener, computed, input, model, output, signal, viewChild } from '@angular/core';
+import { Component, ElementRef, HostListener, computed, inject, input, model, output, signal, viewChild } from '@angular/core';
 import { addMonths, today } from './core';
 import { Icon } from './icon';
 import { BankLogo } from './banks';
@@ -128,14 +128,14 @@ export interface ChipOption { value: string; label: string; icon?: string; color
   imports: [BankLogo],
   template: `
     @if (variant() === 'row') {
-      <button type="button" class="frow" (click)="open.set(!open())" [attr.aria-expanded]="open()" [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')">
+      <button type="button" class="frow" (click)="toggle()" [attr.aria-expanded]="open()" [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')">
         @if (current()?.bank; as b) { <g-bank [name]="b.name" [institution]="b.institution" [size]="40" [fallback]="fallbackIcon()" /> }
         @else { <span class="cat-ico round" [style.--cc]="current()?.color ?? 'var(--muted)'"><span class="ms">{{ current()?.icon ?? fallbackIcon() }}</span></span> }
         <span class="frow-val" [class.placeholder]="!current()">{{ current()?.label ?? placeholder() }}</span>
         <span class="ms caret">chevron_right</span>
       </button>
     } @else {
-      <button type="button" class="fchip" [class.on]="!!value()" (click)="open.set(!open())" [attr.aria-expanded]="open()" [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')">
+      <button type="button" class="fchip" [class.on]="!!value()" (click)="toggle()" [attr.aria-expanded]="open()" [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')">
         @if (current(); as c) {
           @if (c.bank) { <g-bank [name]="c.bank.name" [institution]="c.bank.institution" [size]="20" /> }
           @else if (c.icon) { <span class="ms fchip-ico" [style.color]="c.color">{{ c.icon }}</span> }
@@ -146,7 +146,7 @@ export interface ChipOption { value: string; label: string; icon?: string; color
     }
     @if (open()) {
       <div class="fpop-scrim" (click)="open.set(false)"></div>
-      <div class="fpop" role="listbox" [attr.aria-label]="label()">
+      <div class="fpop" role="listbox" [attr.aria-label]="label()" [style.top.px]="pos()?.top" [style.bottom.px]="pos()?.bottom" [style.left.px]="pos()?.left" [style.width.px]="pos()?.width">
         <div class="fpop-head"><b>{{ label() }}</b>
           @if (value() && clearable()) { <button type="button" class="btn ghost" (click)="pick('')">Limpar</button> }
           <button type="button" class="btn ghost icon" (click)="open.set(false)" aria-label="Fechar"><span class="ms">close</span></button></div>
@@ -154,7 +154,7 @@ export interface ChipOption { value: string; label: string; icon?: string; color
           <div class="search"><span class="ms">search</span><input [value]="q()" (input)="q.set($any($event.target).value)" placeholder="Buscar" /></div>
         }
         <div class="fpop-list">
-          @for (o of filtered(); track o.value; let i = $index) {
+          @for (o of filtered(); track o.value + (o.group ?? ''); let i = $index) {
             @if (o.group && o.group !== filtered()[i - 1]?.group) { <div class="fgroup">{{ o.group }}</div> }
             <button type="button" role="option" class="fopt" [class.sub]="o.sub" [class.on]="o.value === value()" [attr.aria-selected]="o.value === value()" (click)="pick(o.value)">
               @if (o.bank) { <g-bank [name]="o.bank.name" [institution]="o.bank.institution" [size]="26" /> }
@@ -179,11 +179,23 @@ export class ChipSelect {
   value = model('');
   open = signal(false);
   q = signal('');
+  /** desktop: posição fixa calculada do chip (não é cortada por cards vizinhos); celular: folha de baixo via CSS */
+  pos = signal<{ top?: number; bottom?: number; left: number; width: number } | null>(null);
+  private host = inject(ElementRef<HTMLElement>);
   current = computed(() => this.options().find((o) => o.value === this.value()));
   filtered = computed(() => {
     const q = this.q().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     return this.options().filter((o) => !q || o.label.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
   });
   pick(v: string) { this.value.set(v); this.open.set(false); this.q.set(''); }
+  toggle() {
+    if (!this.open() && matchMedia('(min-width: 861px)').matches) {
+      const r = (this.host.nativeElement as HTMLElement).getBoundingClientRect();
+      const width = Math.max(r.width, 300), left = Math.min(r.left, innerWidth - width - 12);
+      const below = innerHeight - r.bottom;
+      this.pos.set(below > 320 || below > r.top ? { top: r.bottom + 6, left, width } : { bottom: innerHeight - r.top + 6, left, width });
+    } else this.pos.set(null);
+    this.open.update((o) => !o);
+  }
   @HostListener('keydown.escape') esc() { this.open.set(false); }
 }

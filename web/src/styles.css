@@ -532,8 +532,8 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .fchip-ico { font-size: 18px; }
 .fchip.clear { color: var(--danger); }
 .fchip .bank-logo { border: 0; }
-.fpop-scrim { position: fixed; inset: 0; z-index: 30; }
-.fpop { position: absolute; z-index: 31; top: calc(100% + 6px); left: 0; min-width: 280px; max-width: min(360px, 92vw); max-height: 400px; overflow: auto;
+.fpop-scrim { position: fixed; inset: 0; z-index: 59; }
+.fpop { position: fixed; z-index: 60; top: calc(100% + 6px); left: 0; min-width: 280px; max-width: min(360px, 92vw); max-height: 400px; overflow: auto;
   padding: .5rem; border-radius: 18px; border: 1px solid var(--line); background: var(--surface); box-shadow: 0 24px 60px -20px oklch(20% 0.05 160 / .4); animation: rise .2s var(--ease); }
 .fpop-head { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .3rem .5rem .4rem; }
 .fpop .search { margin: 0 .3rem .4rem; }
@@ -553,8 +553,6 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .frow-val.placeholder { color: var(--muted); font-weight: 500; }
 .frow .caret { color: var(--muted); }
 .frow .bank-logo { border-radius: 50%; }
-.drawer .fpop { position: fixed; }
-@media (min-width: 861px) { .drawer .fpop { position: absolute; left: 0; right: 0; max-width: none; } }
 
 /* ───────── linhas do formulário sem cara de input ───────── */
 .bare { border: 0 !important; background: transparent !important; box-shadow: none !important; padding: .2rem 0 !important; min-height: 44px; font-size: 1.12rem !important; font-weight: 600; color: var(--ink); }
@@ -589,3 +587,21 @@ textarea.bare { min-height: 44px; resize: none; }
 .sum-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .5rem; padding: .85rem 1.1rem; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); }
 .sum-strip span { display: block; font-size: .74rem; font-weight: 650; color: var(--muted); }
 .sum-strip b { font-size: clamp(.95rem, 2.6vw, 1.15rem); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+
+/* fila para revisar (estilo Copilot) */
+.unrev { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: oklch(62% 0.16 245); margin-right: .45rem; vertical-align: 2px; }
+.chip.blue { background: oklch(62% 0.16 245 / .15); color: oklch(55% 0.16 245); border-color: transparent; }
+.panel.review { border-color: oklch(62% 0.16 245 / .35); }
+.rev-item { align-items: flex-start; }
+.rev-item .fchip-wrap { margin-top: .45rem; }
+.rev-item .fchip { height: 34px; font-size: .82rem; }
+.rev-side { display: flex; flex-direction: column; align-items: flex-end; gap: .5rem; }
+.rev-ok { width: 44px; height: 44px; padding: 0; border-radius: 14px; color: var(--in-text); border-color: color-mix(in oklch, var(--in) 40%, var(--line)); }
+.rev-ok:hover { background: color-mix(in oklch, var(--in) 12%, var(--surface)); }
+.banner { display: flex; align-items: center; gap: .8rem; padding: .9rem 1.1rem; border-radius: 16px; font-size: .92rem; }
+.banner span { flex: 1; }
+.banner.warn { background: color-mix(in oklch, var(--warn) 16%, var(--surface)); border: 1px solid color-mix(in oklch, var(--warn) 45%, transparent); color: var(--ink); }
+.banner.warn > .ms:first-child { color: color-mix(in oklch, var(--warn) 75%, var(--ink)); }
+.suggest-row { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; color: var(--brand); padding: .5rem 0 .2rem; }
+.invoice-hint { display: inline-flex; align-items: center; gap: .3rem; color: var(--muted); margin-top: .2rem; }
+.invoice-hint b { color: var(--ink); text-transform: capitalize; }

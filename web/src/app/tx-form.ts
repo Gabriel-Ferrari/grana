@@ -1,6 +1,6 @@
 import { Component, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Store, Tx, addMonths, brl, catIcon, must, notify, sb, today } from './core';
+import { Store, Tx, addMonths, brl, catIcon, invoiceDue, monthStart, must, notify, sb, today } from './core';
 import { ChipOption, ChipSelect, DatePick, Keypad, Money } from './fields';
 import { Icon } from './icon';
 
@@ -45,14 +45,17 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
           <label class="tx-row"><span class="lbl">Descrição</span>
             <span class="tx-val"><g-icon name="edit" class="muted" /><input class="bare" name="d" [(ngModel)]="f.description" (ngModelChange)="suggestSoon()" required placeholder="Adicione a descrição" autocomplete="off" /></span>
           </label>
-          @if (hint(); as h) {
-            <button type="button" class="suggest" (click)="f.category_id = h.id; hint.set(null)"><g-icon name="auto_awesome" />Usar categoria {{ h.name }}</button>
+          @if (hints().length && !f.category_id) {
+            <div class="suggest-row"><g-icon name="auto_awesome" [size]="16" />
+              @for (h of hints(); track h.id) { <button type="button" class="suggest" (click)="f.category_id = h.id; hints.set([])">{{ h.name }}</button> }
+            </div>
           }
           <div class="tx-row"><span class="lbl">Categoria</span>
             <g-chip-select variant="row" label="Categoria" placeholder="Sem categoria" [options]="catOptions()" [(value)]="f.category_id" />
           </div>
           <div class="tx-row"><span class="lbl">{{ kind() === 'income' ? 'Recebido em' : 'Pago com' }}</span>
             <g-chip-select variant="row" [label]="kind() === 'income' ? 'Recebido em' : 'Pago com'" [options]="originOptions()" [(value)]="f.origin" [clearable]="false" fallbackIcon="account_balance" />
+            @if (invoiceHint(); as ih) { <small class="invoice-hint"><g-icon name="credit_card" [size]="15" />Entra na fatura de <b>{{ ih }}</b></small> }
           </div>
         } @else {
           <div class="tx-row"><span class="lbl">Saiu de</span>
@@ -108,7 +111,10 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             @if (draft().group_id) { <button type="button" class="btn ghost danger" (click)="remove(true)">e próximos</button> }
           }
         </div>
-        <button class="btn save" [disabled]="busy() || !f.cents"><g-icon name="check" [size]="22" />Salvar</button>
+        <div class="row">
+          @if (!draft().id) { <button type="button" class="btn ghost" [disabled]="busy() || !f.cents" (click)="save(true)" title="Salvar e lançar outro">+ Outro</button> }
+          <button class="btn save" [disabled]="busy() || !f.cents"><g-icon name="check" [size]="22" />Salvar</button>
+        </div>
       </footer>
     </form>
   `,
@@ -124,7 +130,8 @@ export class TxForm implements OnInit {
   mobile = matchMedia('(max-width: 860px)').matches;
   keypad = signal(false);
   kind = signal<TxKind>('expense');
-  hint = signal<{ id: string; name: string } | null>(null);
+  hints = signal<{ id: string; name: string }[]>([]);
+  topCats = signal<string[]>([]);
   money = viewChild(Money);
   fmt = (c: number) => brl(Math.round(c));
   private timer?: ReturnType<typeof setTimeout>;
@@ -157,7 +164,17 @@ export class TxForm implements OnInit {
   openKeypad() { this.keypad.set(true); }
   Math = Math;
   catOptions(): ChipOption[] {
-    return this.cats().map((c) => ({ value: c.id, label: c.name, icon: catIcon(c), color: c.color, sub: !!c.parent_id }));
+    const all = this.cats().map((c) => ({ value: c.id, label: c.name, icon: catIcon(c), color: c.color, sub: !!c.parent_id, group: 'Todas' }));
+    const top = this.topCats().map((id) => all.find((o) => o.value === id)).filter((o): o is NonNullable<typeof o> => !!o)
+      .map((o) => ({ ...o, group: 'Mais usadas', sub: false }));
+    return top.length ? [...top, ...all] : all.map((o) => ({ ...o, group: undefined }));
+  }
+  invoiceHint() {
+    const [t, id] = this.f.origin.split(':');
+    const c = t === 'c' ? this.store.cards().find((x) => x.id === id) : undefined;
+    if (!c) return null;
+    const due = invoiceDue(this.f.date, c.closing_day, c.due_day);
+    return new Date(due + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long' }) + ` (vence ${due.slice(8)}/${due.slice(5, 7)})`;
   }
   originOptions(): ChipOption[] {
     return [
@@ -187,6 +204,9 @@ export class TxForm implements OnInit {
     this.more.set(!!(d.tags?.length || d.notes));
     this.keypad.set(this.mobile && !d.id && !d.amount);
     if (!d.id && d.description) this.suggestSoon();
+    sb.rpc('report_by_category', { p_from: addMonths(today(), -2), p_to: today() }).then(({ data }) =>
+      this.topCats.set(((data ?? []) as { category_id: string; expense: number; income: number }[])
+        .filter((r) => r.category_id).sort((a, b) => b.expense + b.income - (a.expense + a.income)).slice(0, 5).map((r) => r.category_id)));
   }
 
   setKind(k: TxKind) {
@@ -194,18 +214,20 @@ export class TxForm implements OnInit {
     if (this.f.category_id && this.store.catById().get(this.f.category_id)?.kind !== (k === 'income' ? 'income' : 'expense')) this.f.category_id = '';
   }
 
-  /** Categoria pelo histórico: a última usada com a mesma descrição (o Organizze chama isso de "IA"). */
+  /** Categorias pelo histórico: as mais usadas com a mesma descrição (até 3), como no YNAB. */
   suggestSoon() {
     clearTimeout(this.timer);
     this.timer = setTimeout(async () => {
       const desc = this.f.description.trim();
-      if (desc.length < 3 || this.f.category_id) return this.hint.set(null);
+      if (desc.length < 3 || this.f.category_id) return this.hints.set([]);
       const { data } = await sb.from('transactions').select('category_id').ilike('description', desc.replace(/[%_\\]/g, '\\$&') + '%')
-        .not('category_id', 'is', null).order('date', { ascending: false }).limit(1).maybeSingle();
-      const c = data?.category_id ? this.store.catById().get(data.category_id) : undefined;
+        .not('category_id', 'is', null).order('date', { ascending: false }).limit(40);
       const k = this.kind() === 'income' ? 'income' : 'expense';
-      this.hint.set(c && c.kind === k && !this.f.category_id ? { id: c.id, name: c.name } : null);
-    }, 350);
+      const count = new Map<string, number>();
+      for (const r of data ?? []) count.set(r.category_id, (count.get(r.category_id) ?? 0) + 1);
+      this.hints.set([...count].sort((a, b) => b[1] - a[1]).map(([id]) => this.store.catById().get(id))
+        .filter((c) => c && c.kind === k).slice(0, 3).map((c) => ({ id: c!.id, name: c!.name })));
+    }, 300);
   }
 
   private origin() {
@@ -213,7 +235,7 @@ export class TxForm implements OnInit {
     return { account_id: t === 'a' ? id : null, card_id: t === 'c' ? id : null };
   }
 
-  async save() {
+  async save(another = false) {
     const total = this.f.cents;
     if (total <= 0 || !this.f.origin) return;
     this.busy.set(true);
@@ -248,7 +270,7 @@ export class TxForm implements OnInit {
           tags, notes: this.f.notes || null, paid: card_id ? true : this.f.paid,
         };
         if (d.id) {
-          await must(sb.from('transactions').update({ ...base, amount: sign * total, date: this.f.date }).eq('id', d.id));
+          await must(sb.from('transactions').update({ ...base, amount: sign * total, date: this.f.date, reviewed: true }).eq('id', d.id));
           firstId = d.id;
         } else {
           const n = this.f.repeat === 'parcelado' ? Math.max(2, this.f.times) : this.f.repeat === 'fixo' ? 12 : 1;
@@ -272,6 +294,13 @@ export class TxForm implements OnInit {
       }
       await this.store.load();
       notify(d.id ? 'Alterações salvas' : this.kind() === 'transfer' ? 'Transferência registrada' : 'Lançamento salvo');
+      if (another) {
+        // mantém tipo, conta e data; limpa o resto (como "salvar e incluir outro" do Meu Dinheiro)
+        Object.assign(this.f, { cents: 0, description: '', category_id: '', repeat: 'none', tags: '', notes: '' });
+        this.hints.set([]);
+        if (this.mobile) this.keypad.set(true); else this.money()?.focus();
+        return;
+      }
       this.close.emit(firstId);
     } finally {
       this.busy.set(false);

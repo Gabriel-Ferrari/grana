@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
 
   const { data: tx, error: txErr } = await db.from('transactions').insert({
     user_id, description: desc, amount: parsed.kind === 'income' ? parsed.amount : -parsed.amount,
-    date: parsed.date, paid: true, card_id, account_id, category_id: prev?.category_id ?? null, source: 'notification',
+    date: parsed.date, paid: true, card_id, account_id, category_id: prev?.category_id ?? null, source: 'notification', reviewed: false,
   }).select('id').single();
   if (txErr) return json({ id: row.id, parsed, error: txErr.message }, 500);
 

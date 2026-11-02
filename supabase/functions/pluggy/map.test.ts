@@ -58,6 +58,8 @@ test('baixa automática da poupança vira transferência (não é receita)', () 
   assert.ok(r.transfer_id);
   assert.equal(r.transfer_id, toRow(tx({ id: 'p1', type: 'CREDIT', amount: 1349.69, description: 'BAIXA AUTOMAT POUPANCA* - DO' }), ctxAcc)!.transfer_id);
   assert.equal(toRow(tx({ id: 'p2', description: 'LELLO CONDOMINIOS LTDA', amount: -1349.69 }), ctxAcc)!.transfer_id, null);
+  assert.ok(toRow(tx({ id: 'p3', description: 'BAIXA AUTOM C CORRENTE* - DOCTO: 528432', amount: -50 }), ctxAcc)!.transfer_id);
+  assert.equal(toRow(tx({ id: 'p4', type: 'CREDIT', description: 'PIX RECEBIDO - REM  JULIA', amount: 10 }), ctxAcc)!.transfer_id, null);
 });
 
 test('categoria da Pluggy -> categoria do grana', () => {

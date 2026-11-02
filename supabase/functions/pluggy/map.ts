@@ -6,14 +6,14 @@ export interface PluggyTx {
   creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null } | null;
 }
 export interface Row {
-  user_id: string; ext_id: string; source: 'openfinance'; description: string; amount: number; date: string; paid: true;
+  user_id: string; ext_id: string; source: 'openfinance'; description: string; amount: number; date: string; paid: true; reviewed: boolean;
   account_id: string | null; card_id: string | null; pays_card_id: string | null; invoice_date: string | null;
   category_id: string | null; installment: number | null; installments: number | null; _pluggyCategory: string | null;
   transfer_id: string | null;
 }
 
 // movimento entre contas do próprio cliente (poupança automática etc.): é transferência, não receita/despesa
-const INTERNA = /baixa autom.*poup|aplic.*poup|resgate.*poup|poupan[cç]a autom|invest f[aá]cil|aplic(a[cç][aã]o)? autom|transf.*mesma titularidade|entre contas/i;
+const INTERNA = /baixa autom.*(poup|c(onta)?\.? ?corrente)|aplic.*poup|resgate.*poup|poupan[cç]a autom|invest f[aá]cil|aplic(a[cç][aã]o)? autom|transf.*mesma titularidade|entre contas/i;
 /** uuid determinístico a partir do id da Pluggy (o mesmo lançamento sempre gera o mesmo transfer_id) */
 function uuidOf(s: string) {
   let h = 0x811c9dc5; const out: number[] = [];
@@ -44,7 +44,7 @@ export function toRow(t: PluggyTx, ctx: {
   }
   const inst = t.creditCardMetadata?.totalInstallments && t.creditCardMetadata.totalInstallments > 1 ? t.creditCardMetadata : null;
   return {
-    user_id: ctx.user_id, ext_id: `pluggy:${t.id}`, source: 'openfinance', description: desc, amount, date, paid: true,
+    user_id: ctx.user_id, ext_id: `pluggy:${t.id}`, source: 'openfinance', description: desc, amount, date, paid: true, reviewed: false,
     account_id: ctx.account_id, card_id: ctx.card_id, pays_card_id: pays, invoice_date,
     category_id: null, installment: inst?.installmentNumber ?? null, installments: inst?.totalInstallments ?? null,
     _pluggyCategory: t.category ?? null,

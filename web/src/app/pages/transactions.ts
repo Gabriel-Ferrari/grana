@@ -48,7 +48,7 @@ import { ChipOption, ChipSelect } from '../fields';
             <div class="item click" (click)="store.open(t)" tabindex="0" (keydown.enter)="store.open(t)">
               <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
               <div class="grow">
-                <div class="title">{{ t.description }}
+                <div class="title">@if (!t.reviewed) {<i class="unrev" title="Para revisar"></i>}{{ t.description }}
                   @if (t.installments) { <span class="tag">{{ t.installment }}/{{ t.installments }}</span> }
                   @if (t.recurring) { <span class="tag"><g-icon name="repeat" [size]="13" />fixo</span> }
                   @if (t.source === 'notification') { <span class="tag auto"><g-icon name="notifications" [size]="13" />auto</span> }

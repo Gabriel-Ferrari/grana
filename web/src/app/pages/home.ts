@@ -1,12 +1,13 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Pace, RankBars, RankItem } from '../charts';
-import { BrlPipe, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
+import { BrlPipe, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, notify, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
 import { Icon } from '../icon';
 import { BankLogo } from '../banks';
+import { ChipOption, ChipSelect } from '../fields';
 
 @Component({
-  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo],
+  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo, ChipSelect],
   template: `
     <div class="page-title reveal">
       <div>
@@ -19,6 +20,11 @@ import { BankLogo } from '../banks';
         </a>
       }
     </div>
+
+    @for (c of connIssues(); track c.id) {
+      <a class="banner warn reveal" routerLink="/ajustes"><g-icon name="warning" [fill]="true" />
+        <span><b>{{ c.connector || 'Banco' }} precisa de atenção</b> — {{ c.error || 'a autorização venceu ou foi negada. Toque para reconectar.' }}</span><g-icon name="chevron_right" /></a>
+    }
 
     <div class="grid-home" [class.loading]="loading()">
       <div class="stack reveal">
@@ -71,6 +77,31 @@ import { BankLogo } from '../banks';
       </div>
 
       <div class="stack reveal">
+        @if (review().length) {
+          <section class="panel review">
+            <div class="panel-head">
+              <div class="row"><h2>Para revisar</h2><span class="chip blue">{{ review().length }}</span></div>
+              <button class="btn ghost" (click)="approveAll()"><g-icon name="done_all" [size]="18" />Revisar todos</button>
+            </div>
+            <p class="muted small" style="margin:-.4rem 0 .6rem">Chegaram sozinhos (notificação ou banco). Confira a categoria e aprove.</p>
+            <div class="list">
+              @for (t of review(); track t.id) {
+                <div class="item rev-item">
+                  <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
+                  <div class="grow">
+                    <div class="title">{{ t.description }}</div>
+                    <div class="sub">{{ store.originName().get(t.account_id ?? t.card_id ?? '') }} · {{ t.date | dmy: true }} · {{ t.source === 'openfinance' ? 'banco' : 'notificação' }}</div>
+                    <g-chip-select label="Sem categoria" [options]="catOptions(t)" [value]="t.category_id ?? ''" (valueChange)="setCat(t, $event)" />
+                  </div>
+                  <div class="rev-side">
+                    <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0">{{ t.amount | brl }}</span>
+                    <button class="btn rev-ok" (click)="approve(t)" aria-label="Marcar como revisado"><g-icon name="check" [size]="20" /></button>
+                  </div>
+                </div>
+              }
+            </div>
+          </section>
+        }
         <section class="panel">
           <div class="panel-head"><h2>A pagar</h2><a routerLink="/lancamentos">Ver tudo <g-icon name="chevron_right" [size]="18" /></a></div>
           <div class="list">
@@ -145,6 +176,11 @@ export class Home {
   daily = signal<{ day: string; expense: number }[]>([]);
   cats = signal<{ category_id: string | null; expense: number }[]>([]);
   bills = signal<Tx[]>([]);
+  review = signal<Tx[]>([]);
+  connIssues = signal<{ id: string; connector: string | null; error: string | null }[]>([]);
+  catOptions = (t: Tx): ChipOption[] => this.store.categories()
+    .filter((c) => !c.archived && c.kind === (t.amount > 0 ? 'income' : 'expense'))
+    .map((c) => ({ value: c.id, label: c.name, icon: catIcon(c), color: c.color, sub: !!c.parent_id }));
   invoices = signal<(Invoice & { due: number })[]>([]);
 
   accounts = computed(() => this.store.accounts().filter((a) => !a.archived));
@@ -183,6 +219,13 @@ export class Home {
   }
 
   async fetch() {
+    const [rv, ci] = await Promise.all([
+      must(sb.from('transactions').select('*').eq('reviewed', false).order('date', { ascending: false }).limit(12)),
+      must(sb.from('pluggy_items').select('id, connector, status, error')),
+    ]);
+    this.review.set(rv as Tx[]);
+    this.connIssues.set((ci as { id: string; connector: string | null; status: string | null; error: string | null }[])
+      .filter((x) => x.error || ['LOGIN_ERROR', 'OUTDATED', 'WAITING_USER_INPUT'].includes(x.status ?? '')));
     const [mo, d, c, b, i] = await Promise.all([
       must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
       must(sb.rpc('report_by_day', { p_from: addMonths(this.m, -3), p_to: this.hoje })),
@@ -203,6 +246,30 @@ export class Home {
   openCategory(id: string) {
     if (id === '__other') this.router.navigate(['/relatorios']);
     else this.router.navigate(['/lancamentos'], { queryParams: { cat: id || 'none', m: this.m.slice(0, 7) } });
+  }
+
+  async setCat(t: Tx, category_id: string) {
+    this.review.update((l) => l.map((x) => (x.id === t.id ? { ...x, category_id: category_id || null } : x)));
+    await must(sb.from('transactions').update({ category_id: category_id || null }).eq('id', t.id));
+  }
+
+  async approve(t: Tx) {
+    this.review.update((l) => l.filter((x) => x.id !== t.id)); // otimista
+    await must(sb.from('transactions').update({ reviewed: true }).eq('id', t.id));
+    notify(`${t.description} revisado`, { action: { label: 'Desfazer', run: async () => {
+      await must(sb.from('transactions').update({ reviewed: false }).eq('id', t.id));
+      await this.store.load();
+    } } });
+  }
+
+  async approveAll() {
+    const ids = this.review().map((t) => t.id);
+    this.review.set([]);
+    await must(sb.from('transactions').update({ reviewed: true }).in('id', ids));
+    notify(`${ids.length} lançamentos revisados`, { action: { label: 'Desfazer', run: async () => {
+      await must(sb.from('transactions').update({ reviewed: false }).in('id', ids));
+      await this.store.load();
+    } } });
   }
 
   async pay(t: Tx) {

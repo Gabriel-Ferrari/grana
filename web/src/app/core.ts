@@ -14,12 +14,13 @@ export interface Card {
   current_invoice_date: string; current_invoice_due: number; institution: string | null; network: string | null;
 }
 export interface Category { id: string; name: string; kind: 'expense' | 'income'; color: string; parent_id: string | null; archived: boolean; icon: string | null }
-export const catIcon = (c?: Pick<Category, 'icon' | 'name'> | null) => c?.icon || (c ? guessIcon(c.name) : 'swap_horiz');
+export const catIcon = (c?: Pick<Category, 'icon' | 'name'> | null) => c?.icon || (c ? guessIcon(c.name) : 'category');
 export interface Tx {
   id: string; description: string; amount: number; date: string; paid: boolean;
   account_id: string | null; card_id: string | null; invoice_date: string | null; pays_card_id: string | null;
   category_id: string | null; transfer_id: string | null; group_id: string | null;
   installment: number | null; installments: number | null; recurring: boolean; tags: string[]; notes: string | null; source: string;
+  reviewed: boolean;
 }
 export interface Invoice { card_id: string; invoice_date: string; total: number; paid: number; items: number; is_paid: boolean }
 
@@ -51,6 +52,17 @@ export function setTheme(t: Theme) {
   localStorage.setItem('grana.theme', t);
   document.documentElement.dataset['theme'] = t;
   dispatchEvent(new Event('grana-theme'));
+}
+
+/** Vencimento da fatura em que cai uma compra (mesma regra do banco: invoice_due). */
+export function invoiceDue(date: string, closing: number, due: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const last = (yy: number, mm: number) => new Date(Date.UTC(yy, mm, 0)).getUTCDate();
+  let cy = y, cm = m;
+  if (d > Math.min(closing, last(y, m))) { cm++; if (cm > 12) { cm = 1; cy++; } }
+  let dy = cy, dm = cm;
+  if (due <= closing) { dm++; if (dm > 12) { dm = 1; dy++; } }
+  return `${dy}-${String(dm).padStart(2, '0')}-${String(Math.min(due, last(dy, dm))).padStart(2, '0')}`;
 }
 
 /** Ocultar valores (olho): lido pelo pipe brl. */
