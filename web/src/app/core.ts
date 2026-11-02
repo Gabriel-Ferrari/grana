@@ -2,6 +2,7 @@ import { Injectable, Pipe, PipeTransform, computed, signal } from '@angular/core
 import { createClient, Session } from '@supabase/supabase-js';
 import { env } from '../env';
 import type { TxDraft } from './tx-form';
+import { guessIcon } from './icon';
 
 export const sb = createClient(env.supabaseUrl, env.supabaseKey);
 
@@ -11,7 +12,8 @@ export interface Card {
   archived: boolean; last4: string | null; payment_account_id: string | null; available: number;
   current_invoice_date: string; current_invoice_due: number;
 }
-export interface Category { id: string; name: string; kind: 'expense' | 'income'; color: string; parent_id: string | null; archived: boolean }
+export interface Category { id: string; name: string; kind: 'expense' | 'income'; color: string; parent_id: string | null; archived: boolean; icon: string | null }
+export const catIcon = (c?: Pick<Category, 'icon' | 'name'> | null) => c?.icon || (c ? guessIcon(c.name) : 'swap_horiz');
 export interface Tx {
   id: string; description: string; amount: number; date: string; paid: boolean;
   account_id: string | null; card_id: string | null; invoice_date: string | null; pays_card_id: string | null;
@@ -36,6 +38,14 @@ export const monthLabel = (iso: string, short = false) =>
 export const toCents = (v: number | string) => Math.round(Number(String(v).replace(',', '.')) * 100);
 export const brl = (cents: number, compact = false) =>
   (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', ...(compact ? { notation: 'compact', maximumFractionDigits: 1 } : {}) });
+
+const BANK_COLORS: [RegExp, string][] = [
+  [/nubank|\bnu\b/i, '#820ad1'], [/bradesco/i, '#cc092f'], [/sicoob/i, '#00a091'], [/caixa/i, '#005ca9'], [/\binter\b/i, '#ff7a00'],
+  [/ita[uú]/i, '#ec7000'], [/santander/i, '#cc0000'], [/\bc6\b/i, '#2b2b2b'], [/banco do brasil|\bbb\b/i, '#0038a8'],
+  [/picpay/i, '#11c76f'], [/mercado ?pago/i, '#00b1ea'], [/\bxp\b/i, '#1c1c1c'], [/btg/i, '#05132a'], [/rappi/i, '#ff441f'],
+];
+/** Cor salva, ou a do banco pelo nome (cartões/contas importados vêm sem cor). */
+export const bankColor = (name: string, color?: string | null) => color || BANK_COLORS.find(([r]) => r.test(name))?.[1] || null;
 
 /** Ocultar valores (olho): lido pelo pipe brl. */
 export const hidden = signal(localStorage.getItem('grana.hidden') === '1');

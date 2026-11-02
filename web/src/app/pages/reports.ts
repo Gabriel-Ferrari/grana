@@ -1,82 +1,99 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { BrlPipe, Store, addMonths, monthEnd, monthStart, must, sb, today } from '../core';
-
-interface Row { date: string; amount: number; root_category_id: string | null }
+import { Router } from '@angular/router';
+import { Flow, FlowMonth, RankBars, RankItem } from '../charts';
+import { BrlPipe, Store, addMonths, catIcon, monthEnd, monthLabel, must, sb, today } from '../core';
 
 @Component({
-  imports: [BrlPipe, FormsModule],
+  imports: [BrlPipe, FormsModule, Flow, RankBars],
   template: `
-    <section class="box row wrap between">
-      <div class="seg">
-        <button [class.on]="mode() === 'expense'" (click)="mode.set('expense')">Despesas por categoria</button>
-        <button [class.on]="mode() === 'income'" (click)="mode.set('income')">Receitas por categoria</button>
-        <button [class.on]="mode() === 'flow'" (click)="mode.set('flow')">Entradas × saídas</button>
+    <div class="page-title reveal">
+      <h1>Relatórios</h1>
+      <div class="row wrap">
+        <div class="seg">
+          @for (p of presets; track p.n) { <button [class.on]="preset() === p.n" (click)="setPreset(p.n)">{{ p.label }}</button> }
+        </div>
+        <input type="month" style="width:auto" [ngModel]="from()" (ngModelChange)="from.set($event); preset.set(0)" aria-label="De" />
+        <input type="month" style="width:auto" [ngModel]="to()" (ngModelChange)="to.set($event); preset.set(0)" aria-label="Até" />
       </div>
-      <div class="row">
-        <input type="month" [ngModel]="from()" (ngModelChange)="from.set($event)" /> até
-        <input type="month" [ngModel]="to()" (ngModelChange)="to.set($event)" />
-      </div>
-    </section>
+    </div>
 
-    <section class="box">
-      @if (mode() === 'flow') {
-        @for (m of months(); track m.month) {
-          <div class="bar-row"><span>{{ m.month }}</span><b [class.neg]="m.inc - m.exp < 0">{{ m.inc - m.exp | brl }}</b>
-            <div class="bar"><i class="pos-bg" [style.width.%]="m.inc / maxMonth() * 100"></i></div>
-            <div class="bar"><i class="neg-bg" [style.width.%]="m.exp / maxMonth() * 100"></i></div>
-            <small class="muted">entradas {{ m.inc | brl }} · saídas {{ m.exp | brl }}</small></div>
-        }
-      } @else {
-        <div class="row between"><b>Total</b><b>{{ total() | brl }}</b></div>
-        @for (g of byCategory(); track g.id) {
-          <div class="bar-row"><span>{{ g.name }} <small class="muted">{{ g.pct.toFixed(1) }}%</small></span><b>{{ g.value | brl }}</b>
-            <div class="bar"><i [style.width.%]="g.pct" [style.background]="g.color"></i></div></div>
-        } @empty { <p class="muted">Sem dados no período.</p> }
-      }
-    </section>
+    <div class="stack" [class.loading]="loading()">
+      <section class="panel reveal">
+        <div class="panel-head">
+          <div><h2>Entradas × saídas</h2><p class="muted small" style="margin:.15rem 0 0">Toque num mês para ver os lançamentos</p></div>
+          <div style="text-align:right"><span class="muted small">Resultado do período</span>
+            <div style="font-weight:750;font-size:1.25rem" [class.neg]="sum().inc - sum().exp < 0" [class.pos]="sum().inc - sum().exp > 0">{{ sum().inc - sum().exp | brl }}</div></div>
+        </div>
+        <g-flow [months]="months()" [active]="current" (pick)="openMonth($event)" />
+        <details class="table-view"><summary>Ver em tabela</summary>
+          <table><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Resultado</th></tr>
+            @for (m of months(); track m.key) { <tr><td>{{ m.label }}</td><td>{{ m.inc | brl }}</td><td>{{ m.exp | brl }}</td><td>{{ m.inc - m.exp | brl }}</td></tr> }
+          </table>
+        </details>
+      </section>
+
+      <div class="grid-2">
+        <section class="panel reveal">
+          <div class="panel-head"><h2>Saídas por categoria</h2><span class="muted small num">{{ sum().exp | brl }}</span></div>
+          <g-rank-bars [items]="expenses()" [max]="10" (pick)="openCat($event)" />
+        </section>
+        <section class="panel reveal">
+          <div class="panel-head"><h2>Entradas por categoria</h2><span class="muted small num">{{ sum().inc | brl }}</span></div>
+          <g-rank-bars [items]="incomes()" tone="in" [max]="10" (pick)="openCat($event)" />
+        </section>
+      </div>
+    </div>
   `,
 })
 export class Reports {
   store = inject(Store);
-  mode = signal<'expense' | 'income' | 'flow'>('expense');
-  to = signal(today().slice(0, 7));
+  router = inject(Router);
+  presets = [{ n: 3, label: '3 meses' }, { n: 6, label: '6 meses' }, { n: 12, label: '12 meses' }];
+  current = today().slice(0, 7);
+  preset = signal(6);
+  to = signal(this.current);
   from = signal(addMonths(today(), -5).slice(0, 7));
-  rows = signal<Row[]>([]);
+  loading = signal(true);
+  byMonth = signal<{ month: string; income: number; expense: number }[]>([]);
+  byCat = signal<{ category_id: string | null; income: number; expense: number }[]>([]);
 
-  byCategory = computed(() => {
-    const exp = this.mode() === 'expense';
-    const by = new Map<string, number>();
-    for (const r of this.rows()) {
-      if (exp ? r.amount >= 0 : r.amount <= 0) continue;
-      by.set(r.root_category_id ?? '', (by.get(r.root_category_id ?? '') ?? 0) + Math.abs(r.amount));
-    }
-    const total = [...by.values()].reduce((a, b) => a + b, 0) || 1;
-    return [...by].sort((a, b) => b[1] - a[1]).map(([id, value]) => {
-      const c = this.store.catById().get(id);
-      return { id, value, name: c?.name ?? 'Sem categoria', color: c?.color ?? '#b3b3b3', pct: (value / total) * 100 };
-    });
+  months = computed<FlowMonth[]>(() => this.byMonth().map((m) => ({
+    key: m.month.slice(0, 7), inc: m.income, exp: m.expense,
+    label: monthLabel(m.month, true).replace('.', '') + (this.byMonth().length > 12 ? '/' + m.month.slice(2, 4) : ''),
+  })));
+  sum = computed(() => this.months().reduce((s, m) => ({ inc: s.inc + m.inc, exp: s.exp + m.exp }), { inc: 0, exp: 0 }));
+  private rank = (k: 'income' | 'expense') => this.byCat().map((c): RankItem => {
+    const cat = this.store.catById().get(c.category_id ?? '');
+    return { id: c.category_id ?? 'none', name: cat?.name ?? 'Sem categoria', value: c[k], color: cat?.color, icon: catIcon(cat) };
   });
-  total = computed(() => this.byCategory().reduce((s, g) => s + g.value, 0));
-  months = computed(() => {
-    const m = new Map<string, { inc: number; exp: number }>();
-    for (const r of this.rows()) {
-      const k = r.date.slice(0, 7);
-      const v = m.get(k) ?? { inc: 0, exp: 0 };
-      if (r.amount > 0) v.inc += r.amount; else v.exp -= r.amount;
-      m.set(k, v);
-    }
-    return [...m].sort().map(([month, v]) => ({ month: month.slice(5) + '/' + month.slice(0, 4), ...v }));
-  });
-  maxMonth = computed(() => Math.max(1, ...this.months().flatMap((m) => [m.inc, m.exp])));
+  expenses = computed(() => this.rank('expense'));
+  incomes = computed(() => this.rank('income'));
 
   constructor() {
     effect(() => { this.store.version(); const f = this.from(), t = this.to(); untracked(() => this.fetch(f, t)); });
   }
 
+  setPreset(n: number) {
+    this.preset.set(n);
+    this.to.set(this.current);
+    this.from.set(addMonths(this.current + '-01', -(n - 1)).slice(0, 7));
+  }
+
   async fetch(from: string, to: string) {
     if (!from || !to) return;
-    this.rows.set(await must(sb.from('report_rows').select('date, amount, root_category_id')
-      .gte('date', monthStart(from + '-01')).lte('date', monthEnd(to + '-01'))) as Row[]);
+    this.loading.set(true);
+    const args = { p_from: from + '-01', p_to: monthEnd(to + '-01') };
+    const [m, c] = await Promise.all([must(sb.rpc('report_by_month', args)), must(sb.rpc('report_by_category', args))]);
+    this.byMonth.set(m as never);
+    this.byCat.set(c as never);
+    this.loading.set(false);
+  }
+
+  openMonth(key: string) {
+    this.router.navigate(['/lancamentos'], { queryParams: { m: key } });
+  }
+  openCat(id: string) {
+    if (id !== '__other') this.router.navigate(['/lancamentos'], { queryParams: { cat: id, m: this.to() } });
   }
 }

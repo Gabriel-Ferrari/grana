@@ -1,51 +1,118 @@
-import { Component, inject } from '@angular/core';
+import { Component, HostListener, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { env } from '../env';
-import { Store, sb, toast } from './core';
+import { Store, hidden, notify, sb, toast, toggleHidden } from './core';
+import { Icon } from './icon';
+import { TxForm } from './tx-form';
+
+const NAV = [
+  { to: '/', label: 'Início', icon: 'home', exact: true },
+  { to: '/lancamentos', label: 'Lançamentos', icon: 'receipt_long' },
+  { to: '/cartoes', label: 'Cartões', icon: 'credit_card' },
+  { to: '/relatorios', label: 'Relatórios', icon: 'bar_chart' },
+  { to: '/limites', label: 'Limites', icon: 'track_changes' },
+  { to: '/notificacoes', label: 'Notificações', icon: 'notifications' },
+  { to: '/ajustes', label: 'Ajustes', icon: 'settings' },
+];
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, Icon, TxForm],
   template: `
     @if (!store.ready()) {
-      <p class="center muted">Carregando…</p>
+      <div style="min-height:100dvh;display:grid;place-items:center"><img src="/icon.svg" width="56" height="56" alt="" style="animation:pop 1s var(--ease) infinite alternate;border-radius:16px" /></div>
     } @else if (!store.session()) {
-      <div class="login box">
-        <h1 class="logo">grana</h1>
-        <p class="muted">Controle financeiro pessoal</p>
-        <button class="primary" (click)="google()">Entrar com Google</button>
-        @if (!prod) {
-          <form (ngSubmit)="devLogin()" class="col">
-            <small class="muted">dev local</small>
-            <input name="e" [(ngModel)]="email" placeholder="email" />
-            <input name="p" [(ngModel)]="pass" type="password" placeholder="senha" />
-            <button>Entrar (dev)</button>
-          </form>
-        }
+      <div class="login">
+        <section class="login-art">
+          <span class="brand"><img src="/icon.svg" alt="" />grana</span>
+          <h1>Seu dinheiro, <em>sem planilha.</em></h1>
+          <div class="ledger" aria-hidden="true">
+            <div><span class="ms">notifications</span>Compra aprovada · Padaria<b>− R$ 18,50</b></div>
+            <div><span class="ms">check_circle</span>Lançado em Alimentação<b>auto</b></div>
+            <div><span class="ms">payments</span>Pix recebido · Salário<b>+ R$ 2.295,26</b></div>
+          </div>
+          <p class="muted">Lê as notificações do banco e lança sozinho. Cartões, faturas, limites e relatórios num lugar só.</p>
+        </section>
+        <section class="login-form">
+          <h2>Entrar</h2>
+          <p class="muted">Use sua conta Google. Só você tem acesso aos seus dados.</p>
+          <button class="google-btn" (click)="google()">
+            <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
+            Continuar com Google
+          </button>
+          @if (!prod) {
+            <form (ngSubmit)="devLogin()" class="row wrap" style="margin-top:1rem">
+              <input name="e" [(ngModel)]="email" placeholder="email (dev)" autocomplete="username" />
+              <input name="p" [(ngModel)]="pass" type="password" placeholder="senha (dev)" autocomplete="current-password" />
+              <button class="btn">Entrar (dev)</button>
+            </form>
+          }
+        </section>
       </div>
     } @else {
-      <header>
-        <a routerLink="/" class="logo">grana</a>
-        <nav>
-          <a routerLink="/" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: true }">Visão geral</a>
-          <a routerLink="/lancamentos" routerLinkActive="on">Lançamentos</a>
-          <a routerLink="/cartoes" routerLinkActive="on">Cartões</a>
-          <a routerLink="/relatorios" routerLinkActive="on">Relatórios</a>
-          <a routerLink="/limites" routerLinkActive="on">Limites</a>
-          <a routerLink="/notificacoes" routerLinkActive="on">Notificações @if (store.pending()) {<b class="badge">{{ store.pending() }}</b>}</a>
-          <a routerLink="/ajustes" routerLinkActive="on">Ajustes</a>
+      <header class="top">
+        <a routerLink="/" class="brand"><img src="/icon.svg" alt="" />grana</a>
+        <nav class="pills" aria-label="Principal">
+          @for (n of nav; track n.to) {
+            <a [routerLink]="n.to" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: !!n.exact }">
+              <g-icon [name]="n.icon" [size]="19" />{{ n.label }}
+              @if (n.to === '/notificacoes' && store.pending()) { <span class="badge">{{ store.pending() }}</span> }
+            </a>
+          }
         </nav>
-        <button class="link" (click)="logout()">Sair</button>
+        <div class="top-actions">
+          <button class="btn ghost icon" (click)="toggleHidden()" [attr.aria-label]="hidden() ? 'Mostrar valores' : 'Ocultar valores'" title="Ocultar valores (H)">
+            <g-icon [name]="hidden() ? 'visibility_off' : 'visibility'" />
+          </button>
+          <button class="btn primary hide-m" (click)="store.open({ kind: 'expense' })" title="Novo lançamento (D, R ou T)"><g-icon name="add" />Novo</button>
+          <button class="btn ghost icon" popovertarget="user-menu" aria-label="Conta">
+            @if (store.avatar(); as a) { <img class="avatar" [src]="a" alt="" referrerpolicy="no-referrer" /> } @else { <g-icon name="more_horiz" /> }
+          </button>
+        </div>
       </header>
-      @if (toast()) { <div class="toast" (click)="toast.set('')">{{ toast() }}</div> }
+      <div id="user-menu" popover class="more-menu" style="inset:4rem 1rem auto auto">
+        <div class="muted small" style="padding:.5rem .8rem">{{ store.session()?.user?.email }}</div>
+        <div class="kbd-hint" style="padding:.2rem .8rem .6rem"><kbd>D</kbd><kbd>R</kbd><kbd>T</kbd> novo · <kbd>H</kbd> ocultar · <kbd>/</kbd> buscar</div>
+        <button (click)="logout()"><g-icon name="logout" />Sair</button>
+      </div>
+
       <main><router-outlet /></main>
+
+      <nav class="tabbar" aria-label="Principal">
+        @for (n of nav.slice(0, 4); track n.to) {
+          <a [routerLink]="n.to" routerLinkActive="on" [routerLinkActiveOptions]="{ exact: !!n.exact }"><g-icon [name]="n.icon" [size]="24" />{{ n.label }}</a>
+        }
+        <button popovertarget="more-menu"><g-icon name="more_horiz" [size]="24" />Mais
+          @if (store.pending()) { <span class="badge">{{ store.pending() }}</span> }</button>
+      </nav>
+      <div id="more-menu" popover class="more-menu">
+        @for (n of nav.slice(4); track n.to) {
+          <a [routerLink]="n.to" (click)="hide('more-menu')"><g-icon [name]="n.icon" />{{ n.label }}
+            @if (n.to === '/notificacoes' && store.pending()) { <span class="badge" style="margin-left:auto">{{ store.pending() }}</span> }</a>
+        }
+        <button (click)="logout()"><g-icon name="logout" />Sair</button>
+      </div>
+      <button class="fab" (click)="store.open({ kind: 'expense' })" aria-label="Novo lançamento"><g-icon name="add" [size]="30" /></button>
+
+      @if (store.form(); as f) { <tx-form [draft]="f.draft" (close)="closeForm($event)" /> }
+    }
+    @if (toast(); as t) {
+      <div class="toast" [class.error]="t.tone === 'error'" role="status">
+        <g-icon [name]="t.tone === 'error' ? 'error' : 'check_circle'" [fill]="true" />
+        <span>{{ t.text }}</span>
+        @if (t.action; as a) { <button (click)="a.run(); toast.set(null)"><g-icon name="undo" [size]="16" /> {{ a.label }}</button> }
+      </div>
     }
   `,
 })
 export class App {
   store = inject(Store);
+  router = inject(Router);
+  nav = NAV;
   toast = toast;
+  hidden = hidden;
+  toggleHidden = toggleHidden;
   prod = env.production;
   email = '';
   pass = '';
@@ -55,9 +122,36 @@ export class App {
   }
   async devLogin() {
     const { error } = await sb.auth.signInWithPassword({ email: this.email, password: this.pass });
-    if (error) toast.set(error.message);
+    if (error) notify(error.message, { tone: 'error' });
   }
   logout() {
     sb.auth.signOut();
+  }
+  hide(id: string) {
+    document.getElementById(id)?.hidePopover();
+  }
+  closeForm(id: string | null) {
+    const f = this.store.form();
+    this.store.form.set(null);
+    f?.done?.(id);
+  }
+
+  /** Atalhos: D despesa, R receita, T transferência, H ocultar valores, / buscar. */
+  @HostListener('document:keydown', ['$event'])
+  keys(e: KeyboardEvent) {
+    const el = e.target as HTMLElement;
+    if (e.ctrlKey || e.metaKey || e.altKey || !this.store.session()) return;
+    if (e.key === 'Escape' && this.store.form()) return this.closeForm(null);
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable || this.store.form()) return;
+    const k = e.key.toLowerCase();
+    const kind = ({ d: 'expense', r: 'income', t: 'transfer' } as const)[k as 'd' | 'r' | 't'];
+    if (kind) { e.preventDefault(); this.store.open({ kind }); }
+    else if (k === 'h') toggleHidden();
+    else if (k === '/') {
+      e.preventDefault();
+      const focus = () => document.getElementById('search')?.focus();
+      if (document.getElementById('search')) focus();
+      else this.router.navigateByUrl('/lancamentos').then(() => setTimeout(focus, 50));
+    }
   }
 }

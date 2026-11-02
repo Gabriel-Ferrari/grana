@@ -50,6 +50,8 @@
               }
             ],
             "styles": [
+              "@fontsource-variable/manrope/index.css",
+              "@fontsource-variable/fraunces/index.css",
               "src/styles.css"
             ]
           },

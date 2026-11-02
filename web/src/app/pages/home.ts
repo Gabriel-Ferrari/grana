@@ -1,115 +1,206 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
-import { RouterLink } from '@angular/router';
-import { BrlPipe, DmyPipe, Invoice, Store, Tx, addMonths, monthEnd, monthStart, sb, today } from '../core';
-import { TxDraft, TxForm } from '../tx-form';
-
-interface Row { amount: number; root_category_id: string | null }
+import { Router, RouterLink } from '@angular/router';
+import { Pace, RankBars, RankItem } from '../charts';
+import { BrlPipe, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
+import { Icon } from '../icon';
 
 @Component({
-  imports: [BrlPipe, DmyPipe, RouterLink, TxForm],
+  imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars],
   template: `
-    <section class="box row between wrap">
+    <div class="page-title reveal">
       <div>
-        <h2>Olá{{ name() ? ', ' + name() : '' }}!</h2>
-        <div class="row">
-          <div><small class="muted">Receitas do mês</small><div class="pos big">{{ income() | brl }}</div></div>
-          <div><small class="muted">Despesas do mês</small><div class="neg big">{{ -expense() | brl }}</div></div>
-        </div>
+        <p class="muted small" style="margin:0 0 .2rem">{{ dateLabel }}</p>
+        <h1 class="greet">{{ hello }}, <em>{{ store.firstName() || 'você' }}</em></h1>
       </div>
-      <div class="row wrap">
-        <button (click)="draft.set({ kind: 'expense' })">− Despesa</button>
-        <button (click)="draft.set({ kind: 'income' })">+ Receita</button>
-        <button (click)="draft.set({ kind: 'transfer' })">⇄ Transferência</button>
-      </div>
-    </section>
-
-    @if (store.pending()) {
-      <a class="box notice" routerLink="/notificacoes">{{ store.pending() }} notificação(ões) aguardando revisão →</a>
-    }
-
-    <div class="grid">
-      <section class="box">
-        <small class="muted">Saldo geral</small>
-        <div class="big">{{ total() | brl }}</div>
-        <h3>Minhas contas</h3>
-        @for (a of accounts(); track a.id) {
-          <div class="item"><span class="dot" [style.background]="a.color || '#1fa463'"></span><span class="grow">{{ a.name }}</span>
-            <b [class.neg]="a.balance < 0">{{ a.balance | brl }}</b></div>
-        } @empty { <p class="muted">Cadastre contas em <a routerLink="/ajustes">Ajustes</a>.</p> }
-      </section>
-
-      <section class="box">
-        <h3>Contas a pagar</h3>
-        @for (t of bills(); track t.id) {
-          <div class="item" [class.late]="t.date < hoje"><span class="grow">{{ t.description }}<br /><small class="muted">{{ t.date | dmy }}</small></span>
-            <b class="neg">{{ t.amount | brl }}</b></div>
-        }
-        @for (i of invoices(); track i.card_id + i.invoice_date) {
-          <a class="item" routerLink="/cartoes"><span class="grow">Fatura {{ store.originName().get(i.card_id) }}<br /><small class="muted">vence {{ i.invoice_date | dmy }}</small></span>
-            <b class="neg">{{ -(i.total - i.paid) | brl }}</b></a>
-        }
-        @if (!bills().length && !invoices().length) { <p class="muted">Nada pendente.</p> }
-      </section>
-
-      <section class="box">
-        <h3>Meus cartões</h3>
-        @for (c of cards(); track c.id) {
-          <a class="item" routerLink="/cartoes"><span class="grow">{{ c.name }}<br /><small class="muted">disponível {{ c.available | brl }}</small></span>
-            <span class="right"><b class="neg">{{ -c.current_invoice_due | brl }}</b><br /><small class="muted">venc. {{ c.current_invoice_date | dmy }}</small></span></a>
-        } @empty { <p class="muted">Nenhum cartão.</p> }
-      </section>
-
-      <section class="box">
-        <h3>Maiores gastos do mês</h3>
-        @for (g of top(); track g.id) {
-          <div class="bar-row"><span>{{ g.name }}</span><b>{{ g.value | brl }}</b>
-            <div class="bar"><i [style.width.%]="g.pct" [style.background]="g.color"></i></div></div>
-        } @empty { <p class="muted">Sem despesas neste mês.</p> }
-      </section>
+      @if (store.pending()) {
+        <a class="chip" routerLink="/notificacoes" style="background:color-mix(in oklch,var(--lime) 40%,var(--surface));color:var(--on-lime);border-color:transparent">
+          <g-icon name="notifications" [size]="16" [fill]="true" />{{ store.pending() }} para revisar
+        </a>
+      }
     </div>
 
-    @if (draft(); as d) { <tx-form [draft]="d" (close)="draft.set(null)" /> }
+    <div class="grid-home" [class.loading]="loading()">
+      <div class="stack reveal">
+        <section class="panel hero">
+          <div class="row between">
+            <span class="muted">Saldo em contas</span>
+            <button class="btn ghost icon" (click)="toggleHidden()" [attr.aria-label]="hidden() ? 'Mostrar valores' : 'Ocultar valores'">
+              <g-icon [name]="hidden() ? 'visibility_off' : 'visibility'" />
+            </button>
+          </div>
+          <div class="hero-value">{{ total() | brl }}</div>
+          <div class="hero-split">
+            <div><span class="muted small">Entrou em {{ monthShort }}</span><b><g-icon name="arrow_downward" [size]="18" />{{ month().income | brl }}</b></div>
+            <div><span class="muted small">Saiu em {{ monthShort }}</span><b><g-icon name="arrow_upward" [size]="18" />{{ month().expense | brl }}</b></div>
+            <div><span class="muted small">Previsto fim do mês</span><b>{{ forecast() | brl }}</b></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Ritmo de gastos</h2>
+              <p class="muted small" style="margin:.15rem 0 0">{{ paceText() }}</p>
+            </div>
+          </div>
+          <g-pace [current]="pace().cur" [previous]="pace().prev" [days]="pace().days" />
+          <details class="table-view"><summary>Ver em tabela</summary>
+            <table><tr><th>Dia</th><th>Este mês</th><th>Mês passado</th></tr>
+              @for (d of tableDays(); track d) { <tr><td>{{ d }}</td><td>{{ pace().cur[d - 1] ?? null | brl }}</td><td>{{ pace().prev[d - 1] ?? null | brl }}</td></tr> }
+            </table>
+          </details>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Para onde foi</h2>
+            <a routerLink="/relatorios">Relatórios <g-icon name="chevron_right" [size]="18" /></a>
+          </div>
+          <g-rank-bars [items]="byCategory()" (pick)="openCategory($event)" empty="Nenhuma despesa neste mês ainda." />
+        </section>
+      </div>
+
+      <div class="stack reveal">
+        <section class="panel">
+          <div class="panel-head"><h2>A pagar</h2><a routerLink="/lancamentos">Ver tudo <g-icon name="chevron_right" [size]="18" /></a></div>
+          <div class="list">
+            @for (t of bills(); track t.id) {
+              <div class="item">
+                <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
+                <div class="grow">
+                  <div class="title">{{ t.description }}</div>
+                  <div class="sub" [class.neg]="t.date < hoje">@if (t.date < hoje) {<g-icon name="warning" [size]="14" />atrasada · } vence {{ t.date | dmy: true }}</div>
+                </div>
+                <span class="amt">{{ -t.amount | brl }}</span>
+                <button class="paid-btn" (click)="pay(t)" title="Marcar como paga"><g-icon name="check" [size]="18" /></button>
+              </div>
+            }
+            @for (i of invoices(); track i.card_id + i.invoice_date) {
+              <a class="item click" routerLink="/cartoes" [queryParams]="{ c: i.card_id }">
+                <span class="cat-ico" style="--cc: var(--brand)"><span class="ms">credit_card</span></span>
+                <div class="grow"><div class="title">Fatura {{ store.originName().get(i.card_id) }}</div><div class="sub">vence {{ i.invoice_date | dmy: true }}</div></div>
+                <span class="amt">{{ i.due | brl }}</span>
+              </a>
+            }
+            @if (!bills().length && !invoices().length) {
+              <div class="empty-state"><g-icon name="check_circle" [fill]="true" /><div><b>Tudo em dia</b>Nada vencendo nos próximos 30 dias.</div></div>
+            }
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Cartões</h2><a routerLink="/cartoes">Faturas <g-icon name="chevron_right" [size]="18" /></a></div>
+          <div class="list">
+            @for (c of cards(); track c.id) {
+              <a class="item click" routerLink="/cartoes" [queryParams]="{ c: c.id }" style="flex-wrap:wrap">
+                <span class="cat-ico" [style.--cc]="bank(c.name, c.color)"><span class="ms">credit_card</span></span>
+                <div class="grow"><div class="title">{{ c.name }}</div><div class="sub">fatura {{ c.current_invoice_date | dmy: true }} · {{ c.current_invoice_due | brl }}</div></div>
+                <span class="amt small">{{ c.available | brl }}<br /><span class="muted" style="font-weight:600">disponível</span></span>
+                <div class="meter" style="width:100%;height:6px;margin:.2rem 0 0" [attr.data-state]="c.available < c.limit_cents * .15 ? 'over' : c.available < c.limit_cents * .4 ? 'warn' : 'ok'">
+                  <span class="fill" [style.width.%]="100 - (c.available / (c.limit_cents || 1)) * 100"></span>
+                </div>
+              </a>
+            } @empty { <div class="empty-state"><g-icon name="credit_card" /><div><b>Sem cartões</b><a routerLink="/ajustes" class="link-more">Cadastrar em Ajustes</a></div></div> }
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head"><h2>Contas</h2><a routerLink="/ajustes">Gerenciar <g-icon name="chevron_right" [size]="18" /></a></div>
+          <div class="list">
+            @for (a of accounts(); track a.id) {
+              <a class="item click" routerLink="/lancamentos" [queryParams]="{ o: 'a:' + a.id }">
+                <span class="cat-ico" [style.--cc]="bank(a.name, a.color)"><span class="ms">account_balance</span></span>
+                <div class="grow"><div class="title">{{ a.name }}</div>@if (a.forecast !== a.balance) {<div class="sub">previsto {{ a.forecast | brl }}</div>}</div>
+                <span class="amt" [class.neg]="a.balance < 0">{{ a.balance | brl }}</span>
+              </a>
+            }
+          </div>
+        </section>
+      </div>
+    </div>
   `,
 })
 export class Home {
   store = inject(Store);
+  router = inject(Router);
+  hidden = hidden;
+  toggleHidden = toggleHidden;
   hoje = today();
-  draft = signal<TxDraft | null>(null);
-  rows = signal<Row[]>([]);
+  m = monthStart(this.hoje);
+  monthShort = monthLabel(this.m, true).replace('.', '');
+  dateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
+  hello = (() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })();
+  loading = signal(true);
+  month = signal({ income: 0, expense: 0 });
+  daily = signal<{ day: string; expense: number }[]>([]);
+  cats = signal<{ category_id: string | null; expense: number }[]>([]);
   bills = signal<Tx[]>([]);
-  invoices = signal<Invoice[]>([]);
+  invoices = signal<(Invoice & { due: number })[]>([]);
 
-  name = computed(() => (this.store.session()?.user.user_metadata?.['full_name'] ?? '').split(' ')[0]);
   accounts = computed(() => this.store.accounts().filter((a) => !a.archived));
   cards = computed(() => this.store.cards().filter((c) => !c.archived));
   total = computed(() => this.accounts().reduce((s, a) => s + a.balance, 0));
-  income = computed(() => this.rows().filter((r) => r.amount > 0).reduce((s, r) => s + r.amount, 0));
-  expense = computed(() => this.rows().filter((r) => r.amount < 0).reduce((s, r) => s + r.amount, 0));
-  top = computed(() => {
-    const by = new Map<string, number>();
-    for (const r of this.rows()) if (r.amount < 0) by.set(r.root_category_id ?? '', (by.get(r.root_category_id ?? '') ?? 0) - r.amount);
-    const max = Math.max(...by.values(), 1);
-    return [...by].sort((a, b) => b[1] - a[1]).slice(0, 6).map(([id, value]) => {
-      const c = this.store.catById().get(id);
-      return { id, value, name: c?.name ?? 'Sem categoria', color: c?.color ?? '#b3b3b3', pct: (value / max) * 100 };
-    });
+  forecast = computed(() => this.accounts().reduce((s, a) => s + a.forecast, 0) - this.invoices().filter((i) => i.invoice_date <= monthEnd(this.hoje)).reduce((s, i) => s + i.due, 0));
+  icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
+  bank = (name: string, c: string | null) => bankColor(name, c) ?? 'var(--brand)';
+
+  pace = computed(() => {
+    const prevStart = addMonths(this.m, -1);
+    const days = +monthEnd(this.m).slice(8);
+    const todayN = +this.hoje.slice(8);
+    const cum = (start: string, n: number) => {
+      const by = new Map(this.daily().filter((d) => d.day.startsWith(start.slice(0, 7))).map((d) => [+d.day.slice(8), d.expense]));
+      let acc = 0;
+      return Array.from({ length: n }, (_, i) => (acc += by.get(i + 1) ?? 0));
+    };
+    return { cur: cum(this.m, todayN), prev: cum(prevStart, +monthEnd(prevStart).slice(8)), days };
   });
+  tableDays = computed(() => Array.from({ length: this.pace().cur.length }, (_, i) => i + 1));
+  paceText = computed(() => {
+    const { cur, prev } = this.pace();
+    const now = cur.at(-1) ?? 0, then = prev[cur.length - 1] ?? 0;
+    if (hidden()) return 'Valores ocultos';
+    if (!then) return 'Gasto acumulado do mês, dia a dia.';
+    if (!now) return `Nada gasto até hoje. No mês passado, até o dia ${cur.length}: ${brl(then)}.`;
+    const pct = Math.round(((now - then) / then) * 100);
+    return pct === 0 ? 'Igual ao mês passado até hoje.' : `${Math.abs(pct)}% ${pct > 0 ? 'acima' : 'abaixo'} do mês passado até hoje.`;
+  });
+  byCategory = computed<RankItem[]>(() => this.cats().filter((c) => c.expense > 0).map((c) => {
+    const cat = this.store.catById().get(c.category_id ?? '');
+    return { id: c.category_id ?? '', name: cat?.name ?? 'Sem categoria', value: c.expense, color: cat?.color, icon: catIcon(cat) };
+  }));
 
   constructor() {
     effect(() => { this.store.version(); untracked(() => this.fetch()); });
   }
 
   async fetch() {
-    const m = monthStart(this.hoje);
-    const [r, b, i] = await Promise.all([
-      sb.from('report_rows').select('amount, root_category_id').gte('date', m).lte('date', monthEnd(m)),
-      sb.from('transactions').select('*').eq('paid', false).not('account_id', 'is', null).lt('amount', 0)
-        .lte('date', addMonths(this.hoje, 1)).order('date').limit(8),
-      sb.from('invoices').select('*').eq('is_paid', false).gt('total', 0).gte('invoice_date', addMonths(this.hoje, -2))
-        .lte('invoice_date', addMonths(this.hoje, 2)).order('invoice_date').limit(8),
+    const prevStart = addMonths(this.m, -1);
+    const [mo, d, c, b, i] = await Promise.all([
+      must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
+      must(sb.rpc('report_by_day', { p_from: prevStart, p_to: this.hoje })),
+      must(sb.rpc('report_by_category', { p_from: this.m, p_to: monthEnd(this.m) })),
+      must(sb.from('transactions').select('*').eq('paid', false).not('account_id', 'is', null).lt('amount', 0)
+        .lte('date', addMonths(this.hoje, 1)).order('date').limit(6)),
+      must(sb.from('invoices').select('*').gt('due', 0).gte('invoice_date', addMonths(this.hoje, -1)).lte('invoice_date', addMonths(this.hoje, 2)).order('invoice_date').limit(6)),
     ]);
-    this.rows.set((r.data ?? []) as Row[]);
-    this.bills.set((b.data ?? []) as Tx[]);
-    this.invoices.set((i.data ?? []) as Invoice[]);
+    const row = (mo as { income: number; expense: number }[])[0];
+    this.month.set({ income: row?.income ?? 0, expense: row?.expense ?? 0 });
+    this.daily.set(d as { day: string; expense: number }[]);
+    this.cats.set(c as { category_id: string | null; expense: number }[]);
+    this.bills.set(b as Tx[]);
+    this.invoices.set(i as (Invoice & { due: number })[]);
+    this.loading.set(false);
+  }
+
+  openCategory(id: string) {
+    if (id === '__other') this.router.navigate(['/relatorios']);
+    else this.router.navigate(['/lancamentos'], { queryParams: { cat: id || 'none', m: this.m.slice(0, 7) } });
+  }
+
+  async pay(t: Tx) {
+    this.bills.update((l) => l.filter((x) => x.id !== t.id)); // otimista
+    await this.store.withUndo(`${t.description} marcada como paga`, { column: 'id', value: t.id },
+      () => must(sb.from('transactions').update({ paid: true }).eq('id', t.id)));
   }
 }

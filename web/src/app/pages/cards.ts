@@ -1,106 +1,145 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
-import { BrlPipe, DmyPipe, Invoice, Store, Tx, must, sb, toCents, today } from '../core';
-import { TxDraft, TxForm } from '../tx-form';
+import { Router, RouterLink } from '@angular/router';
+import { Meter } from '../charts';
+import { BrlPipe, DmyPipe, Invoice, Store, Tx, bankColor, catIcon, monthLabel, must, notify, sb, toCents, today } from '../core';
+import { Icon } from '../icon';
+
+type Inv = Invoice & { due: number };
 
 @Component({
-  imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, TxForm],
+  imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, Icon, Meter],
   template: `
-    @if (!cards().length) { <section class="box muted">Nenhum cartão. Cadastre em <a routerLink="/ajustes">Ajustes</a>.</section> }
-    <div class="row wrap">
+    <div class="page-title reveal"><h1>Cartões</h1></div>
+
+    @if (!cards().length) {
+      <section class="panel empty-state"><g-icon name="credit_card" /><div><b>Nenhum cartão</b>Cadastre em <a routerLink="/ajustes" class="link-more">Ajustes</a> com dia de fechamento e vencimento.</div></section>
+    }
+
+    <div class="cc-rail reveal" role="tablist">
       @for (c of cards(); track c.id) {
-        <button [class.on]="c.id === cardId()" (click)="cardId.set(c.id); inv.set('')">{{ c.name }}</button>
+        <button class="cc" role="tab" [attr.aria-selected]="c.id === card()?.id" [class.on]="c.id === card()?.id" [style.--c]="color(c.name, c.color)"
+                (click)="select(c.id)">
+          <div class="cc-top"><span>{{ c.name }}</span><span class="ms">contactless</span></div>
+          <div class="row between"><span class="cc-chip"></span><span class="cc-num">•••• {{ c.last4 || '····' }}</span></div>
+          <div class="cc-foot">
+            <span>Disponível<b>{{ c.available | brl }}</b></span>
+            <span style="text-align:right">Fatura {{ c.current_invoice_date | dmy: true }}<b>{{ c.current_invoice_due | brl }}</b></span>
+          </div>
+        </button>
       }
     </div>
 
     @if (card(); as c) {
-      <section class="box row between wrap">
-        <div><small class="muted">Limite</small><div>{{ c.limit_cents | brl }}</div></div>
-        <div><small class="muted">Disponível</small><div class="big">{{ c.available | brl }}</div></div>
-        <div><small class="muted">Fecha dia {{ c.closing_day }} · vence dia {{ c.due_day }}</small></div>
+      <section class="panel reveal">
+        <g-meter label="Limite usado" [value]="c.limit_cents - c.available" [max]="c.limit_cents" />
+        <p class="muted small" style="margin:.6rem 0 0">Fecha dia {{ c.closing_day }} · vence dia {{ c.due_day }}</p>
       </section>
 
-      <div class="grid2">
-        <section class="box">
-          <h3>Faturas</h3>
-          @for (i of invoices(); track i.invoice_date) {
-            <div class="item click" [class.sel]="i.invoice_date === sel()?.invoice_date" (click)="inv.set(i.invoice_date)">
-              <span class="grow">{{ i.invoice_date | dmy }}<br /><small class="muted">{{ i.items }} lançamentos</small></span>
-              <span class="right"><b>{{ i.total | brl }}</b><br /><small [class.pos]="i.is_paid" [class.neg]="!i.is_paid && i.invoice_date < hoje">{{ i.is_paid ? 'paga' : i.invoice_date < hoje ? 'vencida' : 'aberta' }}</small></span>
-            </div>
-          } @empty { <p class="muted">Sem faturas.</p> }
-        </section>
-
-        <section class="box">
-          @if (sel(); as i) {
-            <div class="row between"><h3>Fatura {{ i.invoice_date | dmy }}</h3><b>{{ i.total | brl }}</b></div>
-            @for (t of txs(); track t.id) {
-              <div class="item click" (click)="draft.set(t)"><span class="grow">{{ t.description }}
-                @if (t.installments) { <small class="muted">{{ t.installment }}/{{ t.installments }}</small> }
-                <br /><small class="muted">{{ t.date | dmy }} · {{ store.catById().get(t.category_id ?? '')?.name ?? 'Sem categoria' }}</small></span>
-                <b [class.neg]="t.amount < 0" [class.pos]="t.amount > 0">{{ t.amount | brl }}</b></div>
-            }
-            @if (i.paid) { <p class="muted">Pago: {{ i.paid | brl }}</p> }
-            @if (!i.is_paid) {
-              <form class="row wrap pay" (ngSubmit)="pay(i)">
-                <select name="acc" [(ngModel)]="payAcc" required>
-                  @for (a of store.accounts(); track a.id) { <option [value]="a.id">{{ a.name }}</option> }
-                </select>
-                <input name="v" type="number" step="0.01" [(ngModel)]="payValue" [placeholder]="((i.total - i.paid) / 100).toFixed(2)" />
-                <input name="d" type="date" [(ngModel)]="payDate" />
-                <button class="primary">Pagar fatura</button>
-              </form>
-            }
-          }
-        </section>
+      <div class="inv-strip reveal" role="tablist" aria-label="Faturas">
+        @for (i of invoices(); track i.invoice_date) {
+          <button role="tab" [class.on]="i.invoice_date === sel()?.invoice_date" [attr.aria-selected]="i.invoice_date === sel()?.invoice_date" (click)="inv.set(i.invoice_date)">
+            <span><i class="status-dot" [class.paid]="i.is_paid" [class.late]="!i.is_paid && i.invoice_date < hoje" [class.open]="!i.is_paid && i.invoice_date >= hoje"></i>{{ short(i.invoice_date) }}</span>
+            <b>{{ i.total | brl }}</b>
+          </button>
+        }
       </div>
+
+      @if (sel(); as i) {
+        <section class="panel reveal">
+          <div class="panel-head">
+            <div>
+              <h2>Fatura de {{ long(i.invoice_date) }}</h2>
+              <p class="muted small" style="margin:.15rem 0 0">vence {{ i.invoice_date | dmy }} ·
+                <span [class.pos]="i.is_paid" [class.neg]="!i.is_paid && i.invoice_date < hoje">{{ i.is_paid ? 'paga' : i.invoice_date < hoje ? 'vencida' : 'em aberto' }}</span></p>
+            </div>
+            <div style="text-align:right"><div class="big" style="font-size:1.5rem;font-weight:750">{{ i.total | brl }}</div>
+              @if (i.due !== i.total) { <span class="muted small">a pagar {{ i.due | brl }}</span> }</div>
+          </div>
+
+          @if (i.due > 0) {
+            <form class="row wrap" (ngSubmit)="pay(i)" style="padding:.8rem;border-radius:14px;background:var(--sunk);margin-bottom:.6rem">
+              <label style="min-width:150px">Pagar com <select name="acc" [(ngModel)]="payAcc">
+                @for (a of store.accounts(); track a.id) { <option [value]="a.id">{{ a.name }}</option> }
+              </select></label>
+              <label style="min-width:110px">Valor <input name="v" type="number" step="0.01" [(ngModel)]="payValue" [placeholder]="(i.due / 100).toFixed(2)" /></label>
+              <label style="min-width:130px">Data <input name="d" type="date" [(ngModel)]="payDate" /></label>
+              <button class="btn lime" style="align-self:flex-end"><g-icon name="payments" [size]="18" />Pagar fatura</button>
+            </form>
+          }
+
+          <div class="list" [class.loading]="loadingTx()">
+            @for (t of txs(); track t.id) {
+              <div class="item click" (click)="store.open(t)">
+                <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
+                <div class="grow"><div class="title">{{ t.description }} @if (t.installments) {<span class="tag">{{ t.installment }}/{{ t.installments }}</span>}</div>
+                  <div class="sub">{{ t.date | dmy: true }} · {{ store.catById().get(t.category_id ?? '')?.name ?? 'Sem categoria' }}</div></div>
+                <span class="amt" [class.pos]="t.amount > 0">{{ t.amount | brl }}</span>
+              </div>
+            } @empty { <div class="empty-state"><g-icon name="receipt_long" /><div><b>Fatura vazia</b>Compras feitas até o dia {{ c.closing_day }} entram aqui.</div></div> }
+          </div>
+        </section>
+      }
     }
-    @if (draft(); as d) { <tx-form [draft]="d" (close)="draft.set(null)" /> }
   `,
 })
 export class Cards {
   store = inject(Store);
+  router = inject(Router);
+  c = input<string>(); // ?c=<card id>
   hoje = today();
-  cards = computed(() => this.store.cards().filter((c) => !c.archived));
-  cardId = signal('');
-  card = computed(() => this.cards().find((c) => c.id === this.cardId()) ?? this.cards()[0]);
-  invoices = signal<Invoice[]>([]);
+  cards = computed(() => this.store.cards().filter((x) => !x.archived));
+  card = computed(() => this.cards().find((x) => x.id === this.c()) ?? this.cards()[0]);
+  invoices = signal<Inv[]>([]);
   inv = signal('');
   sel = computed(() => this.invoices().find((i) => i.invoice_date === (this.inv() || this.card()?.current_invoice_date)) ?? this.invoices()[0]);
   txs = signal<Tx[]>([]);
-  draft = signal<TxDraft | null>(null);
+  loadingTx = signal(false);
   payAcc = '';
   payValue: number | null = null;
   payDate = today();
+  short = (d: string) => monthLabel(d, true).replace('.', '') + '/' + d.slice(2, 4);
+  long = (d: string) => monthLabel(d);
+  icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
+  color = (name: string, c: string | null) => bankColor(name, c) ?? 'var(--forest)';
 
   constructor() {
     effect(() => {
       this.store.version();
       const c = this.card();
-      untracked(() => { if (!c) return; this.payAcc = c.payment_account_id ?? this.store.accounts()[0]?.id ?? ''; this.fetch(c.id); });
+      untracked(() => { if (!c) return; this.payAcc ||= c.payment_account_id ?? this.store.accounts()[0]?.id ?? ''; this.fetch(c.id); });
     });
     effect(() => { const i = this.sel(); untracked(() => this.fetchTxs(i)); });
   }
 
+  select(id: string) {
+    this.inv.set('');
+    this.payAcc = this.cards().find((x) => x.id === id)?.payment_account_id ?? this.payAcc;
+    this.router.navigate([], { queryParams: { c: id }, replaceUrl: true });
+  }
+
   async fetch(cardId: string) {
-    this.invoices.set(await must(sb.from('invoices').select('*').eq('card_id', cardId).order('invoice_date', { ascending: false }).limit(24)) as Invoice[]);
+    const all = await must(sb.from('invoices').select('*').eq('card_id', cardId).order('invoice_date', { ascending: false }).limit(24)) as Inv[];
+    this.invoices.set(all.reverse()); // antigas à esquerda, futuras à direita
+    setTimeout(() => document.querySelector('.inv-strip .on')?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }), 60);
   }
 
-  async fetchTxs(i: Invoice | undefined) {
+  async fetchTxs(i: Inv | undefined) {
     if (!i) return this.txs.set([]);
+    this.loadingTx.set(true);
     this.txs.set(await must(sb.from('transactions').select('*').eq('card_id', i.card_id).eq('invoice_date', i.invoice_date).order('date', { ascending: false })) as Tx[]);
+    this.loadingTx.set(false);
   }
 
-  async pay(i: Invoice) {
-    const value = this.payValue ? toCents(this.payValue) : i.total - i.paid;
-    const account = this.payAcc || this.store.accounts()[0]?.id;
-    if (!account || value <= 0) return;
+  async pay(i: Inv) {
+    const value = this.payValue ? toCents(this.payValue) : i.due;
+    if (!this.payAcc || value <= 0) return;
     await must(sb.from('transactions').insert({
       description: `Pagamento fatura ${this.card()?.name} ${i.invoice_date.slice(5, 7)}/${i.invoice_date.slice(0, 4)}`,
-      amount: -value, date: this.payDate, account_id: account, pays_card_id: i.card_id, invoice_date: i.invoice_date,
+      amount: -value, date: this.payDate, account_id: this.payAcc, pays_card_id: i.card_id, invoice_date: i.invoice_date,
     }));
     this.payValue = null;
     await this.store.load();
+    notify('Fatura paga. Limite liberado.');
   }
 }
