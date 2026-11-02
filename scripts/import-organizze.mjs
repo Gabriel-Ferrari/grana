@@ -17,13 +17,17 @@ if (!ORGANIZZE_EMAIL || !ORGANIZZE_TOKEN || !SUPABASE_URL || !SUPABASE_SERVICE_R
 }
 const START = process.argv[2] ?? '2018-01';
 
-const org = async (path) => {
+const org = async (path, attempt = 1) => {
   const r = await fetch((process.env.ORGANIZZE_API ?? 'https://api.organizze.com.br/rest/v2') + path, {
     headers: {
       Authorization: 'Basic ' + Buffer.from(`${ORGANIZZE_EMAIL}:${ORGANIZZE_TOKEN}`).toString('base64'),
       'User-Agent': `grana-import (${ORGANIZZE_EMAIL})`,
     },
   });
+  if ((r.status === 429 || r.status >= 500) && attempt < 5) {   // limite de taxa / instabilidade: espera e tenta de novo
+    await new Promise((ok) => setTimeout(ok, 2000 * attempt));
+    return org(path, attempt + 1);
+  }
   if (!r.ok) throw new Error(`Organizze ${path}: ${r.status} ${await r.text()}`);
   return r.json();
 };
