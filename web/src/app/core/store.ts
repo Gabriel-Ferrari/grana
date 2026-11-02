@@ -4,6 +4,7 @@ import type { TxDraft } from '../features/transactions/tx-form';
 import { Account, Card, Category, byPosition } from './models';
 import { must, sb } from './supabase';
 import { notify } from './ui-state';
+import { clearCache } from './cache';
 
 /** Estado compartilhado: sessão, cadastros e o formulário de lançamento (aberto de qualquer tela). */
 @Injectable({ providedIn: 'root' })
@@ -50,11 +51,13 @@ export class Store {
     private async setSession(s: Session | null) {
         const changed = s?.user.id !== this.session()?.user.id;
         this.session.set(s);
+        if (changed) clearCache();
         if (s && changed) await this.load();
         this.ready.set(true);
     }
 
     async load() {
+        clearCache(); // algo mudou: as telas buscam de novo sem mostrar o resultado guardado (velho)
         const [a, c, k, n, r] = await Promise.all([
             sb.from('account_balances').select('*').order('name'),
             sb.from('card_status').select('*').order('name'),

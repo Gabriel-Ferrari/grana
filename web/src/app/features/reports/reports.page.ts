@@ -3,7 +3,22 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { BalanceLine, Donut, Flow, FlowMonth, RankBars, RankItem } from '../../shared/ui/charts';
 import { ChipOption, ChipSelect } from '../../shared/ui/fields';
-import { BrlPipe, DmyPipe, Store, Tx, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../../core';
+import {
+    BrlPipe,
+    DmyPipe,
+    Store,
+    Tx,
+    addMonths,
+    catIcon,
+    monthEnd,
+    monthLabel,
+    monthStart,
+    must,
+    sb,
+    today,
+    swr,
+    cached,
+} from '../../core';
 import { Recurring, detectRecurring } from './recurring';
 import { Icon } from '../../shared/ui/icon';
 
@@ -431,20 +446,27 @@ export class Reports {
 
     async fetch(from: string, to: string, byInvoice = false) {
         if (!from || !to) return;
-        this.loading.set(true);
         const args = { p_from: from + '-01', p_to: monthEnd(to + '-01'), ...(byInvoice ? { p_by_invoice: true } : {}) };
+        const key = `rep:${from}:${to}:${byInvoice}`;
+        if (!cached(key)) this.loading.set(true);
         const end = monthEnd(to + '-01') < today() ? monthEnd(to + '-01') : today();
-        const [m, c, b, t] = await Promise.all([
-            must(sb.rpc('report_by_month', args)),
-            must(sb.rpc('report_by_category', args)),
-            sb.rpc('balance_by_day', { p_from: from + '-01', p_to: end }).then((r) => r.data ?? []),
-            sb.rpc('report_by_tag', args).then((r) => r.data ?? []),
-        ]);
-        this.balDays.set(b as never);
-        this.tags.set(t as never);
-        this.byMonth.set(m as never);
-        this.byCat.set(c as never);
-        this.loading.set(false);
+        await swr(
+            key,
+            () =>
+                Promise.all([
+                    must(sb.rpc('report_by_month', args)),
+                    must(sb.rpc('report_by_category', args)),
+                    sb.rpc('balance_by_day', { p_from: from + '-01', p_to: end }).then((r) => r.data ?? []),
+                    sb.rpc('report_by_tag', args).then((r) => r.data ?? []),
+                ]),
+            ([m, c, b, t]) => {
+                this.balDays.set(b as never);
+                this.tags.set(t as never);
+                this.byMonth.set(m as never);
+                this.byCat.set(c as never);
+                this.loading.set(false);
+            },
+        );
     }
 
     openMonth(key: string) {

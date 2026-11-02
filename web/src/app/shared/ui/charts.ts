@@ -328,7 +328,7 @@ export class Pace {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 900, easing: 'easeOutQuart' },
+                animation: { duration: 300, easing: 'easeOutQuart' },
                 interaction: { mode: 'index', intersect: false },
                 layout: { padding: { top: 8, right: 8 } },
                 scales: {
@@ -472,7 +472,7 @@ export class Flow {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 800, easing: 'easeOutQuart' },
+                animation: { duration: 300, easing: 'easeOutQuart' },
                 interaction: { mode: 'index', intersect: false },
                 onHover: (e, els) => ((e.native?.target as HTMLElement).style.cursor = els.length ? 'pointer' : 'default'),
                 onClick: (_e, els) => {
@@ -608,7 +608,7 @@ export class BalanceLine {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                animation: { duration: 700, easing: 'easeOutQuart' },
+                animation: { duration: 300, easing: 'easeOutQuart' },
                 interaction: { mode: 'index', intersect: false },
                 layout: { padding: { top: 8, right: 8 } },
                 scales: {
@@ -707,7 +707,7 @@ export class Donut {
                 responsive: true,
                 maintainAspectRatio: false,
                 cutout: '64%',
-                animation: { duration: 700, easing: 'easeOutQuart' },
+                animation: { duration: 300, easing: 'easeOutQuart' },
                 onClick: (_e: unknown, els: { index: number }[]) => {
                     const s = sl[els[0]?.index ?? -1];
                     if (s) this.pick.emit(s.id);

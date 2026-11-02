@@ -1,7 +1,23 @@
 import { Component, HostListener, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { BrlPipe, Invoice, Store, Tx, addMonths, notify, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../../core';
+import {
+    BrlPipe,
+    Invoice,
+    Store,
+    Tx,
+    addMonths,
+    notify,
+    catIcon,
+    monthEnd,
+    monthLabel,
+    monthStart,
+    must,
+    sb,
+    today,
+    swr,
+    cached,
+} from '../../core';
 import { Icon } from '../../shared/ui/icon';
 import { ChipOption, ChipSelect } from '../../shared/ui/fields';
 
@@ -645,7 +661,6 @@ export class Transactions {
     }
 
     async fetch(month: string, until: string, origin: string) {
-        this.loading.set(true);
         this.sel.set(this.empty);
         let q = sb.from('transactions').select('*').gte('date', month).lte('date', until);
         const [t, id] = origin.split(':');
@@ -653,20 +668,35 @@ export class Transactions {
         if (t === 'c') q = q.eq('card_id', id);
         const end = until;
         const ids = [...this.accIds()];
-        const [rows, invs, pend, after] = await Promise.all([
-            must(q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id')),
-            must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
-            must(sb.from('transactions').select('amount, account_id').eq('paid', false).not('account_id', 'is', null).lte('date', end)),
-            // o que mexeu nas contas depois do período (para voltar do saldo de hoje até o fim de cada dia)
-            ids.length
-                ? must(sb.from('transactions').select('amount').eq('paid', true).in('account_id', ids).gt('date', end))
-                : Promise.resolve([]),
-        ]);
-        this.afterSum.set((after as { amount: number }[]).reduce((s, r) => s + r.amount, 0));
-        this.rows.set(rows as Tx[]);
-        this.invs.set(invs as Inv[]);
-        this.pend.set(pend as { amount: number; account_id: string }[]);
-        this.loading.set(false);
+        const key = `tx:${month}:${until}:${origin}:${ids.join(',')}`;
+        if (!cached(key)) this.loading.set(true);
+        await swr(
+            key,
+            () =>
+                Promise.all([
+                    must(q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id')),
+                    must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
+                    must(
+                        sb
+                            .from('transactions')
+                            .select('amount, account_id')
+                            .eq('paid', false)
+                            .not('account_id', 'is', null)
+                            .lte('date', end),
+                    ),
+                    // o que mexeu nas contas depois do período (para voltar do saldo de hoje até o fim de cada dia)
+                    ids.length
+                        ? must(sb.from('transactions').select('amount').eq('paid', true).in('account_id', ids).gt('date', end))
+                        : Promise.resolve([]),
+                ]),
+            ([rows, invs, pend, after]) => {
+                this.afterSum.set((after as { amount: number }[]).reduce((s, r) => s + r.amount, 0));
+                this.rows.set(rows as Tx[]);
+                this.invs.set(invs as Inv[]);
+                this.pend.set(pend as { amount: number; account_id: string }[]);
+                this.loading.set(false);
+            },
+        );
     }
 
     setParam(key: string, value: string) {

@@ -21,6 +21,8 @@ import {
     today,
     toggleHidden,
     haptic,
+    swr,
+    cached,
 } from '../../core';
 import { invoiceStatus } from '../cards/invoice';
 import { Icon } from '../../shared/ui/icon';
@@ -727,68 +729,74 @@ export class Home {
     }
 
     async fetch() {
-        const [rv, ci] = await Promise.all([
-            must(sb.from('transactions').select('*').eq('reviewed', false).order('date', { ascending: false }).limit(12)),
-            must(sb.from('pluggy_items').select('id, connector, status, error')),
-        ]);
-        this.review.set(rv as Tx[]);
-        this.connIssues.set(
-            (ci as { id: string; connector: string | null; status: string | null; error: string | null }[]).filter(
-                (x) => x.error || ['LOGIN_ERROR', 'OUTDATED', 'WAITING_USER_INPUT'].includes(x.status ?? ''),
-            ),
+        // uma rodada só (antes eram duas em sequência = esperar a rede duas vezes) e resultado guardado (swr)
+        if (!cached('home:' + this.m)) this.loading.set(true);
+        await swr(
+            'home:' + this.m,
+            () =>
+                Promise.all([
+                    must(sb.from('transactions').select('*').eq('reviewed', false).order('date', { ascending: false }).limit(12)),
+                    must(sb.from('pluggy_items').select('id, connector, status, error')),
+                    must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
+                    must(sb.rpc('report_by_day', { p_from: addMonths(this.m, -3), p_to: this.hoje })),
+                    must(sb.rpc('report_by_category', { p_from: this.m, p_to: monthEnd(this.m) })),
+                    must(
+                        sb
+                            .from('transactions')
+                            .select('*')
+                            .eq('paid', false)
+                            .not('account_id', 'is', null)
+                            .lt('amount', 0)
+                            .lte('date', addMonths(this.hoje, 1))
+                            .order('date')
+                            .limit(6),
+                    ),
+                    must(
+                        sb
+                            .from('invoices')
+                            .select('*')
+                            .gt('due', 0)
+                            .gte('invoice_date', addMonths(this.hoje, -1))
+                            .lte('invoice_date', addMonths(this.hoje, 2))
+                            .order('invoice_date')
+                            .limit(6),
+                    ),
+                    // atrasados (como o banner do Organizze): pendentes em conta com data passada
+                    must(
+                        sb
+                            .from('transactions')
+                            .select('amount')
+                            .eq('paid', false)
+                            .not('account_id', 'is', null)
+                            .is('transfer_id', null)
+                            .lt('date', this.hoje),
+                    ),
+                    // faturas que vencem neste mês (pagas ou não): total do mês no card de cartões
+                    must(sb.from('invoices').select('due, paid').gte('invoice_date', this.m).lte('invoice_date', monthEnd(this.m))),
+                ]),
+            ([rv, ci, mo, d, c, b, i, l, mi]) => {
+                this.review.set(rv as Tx[]);
+                this.connIssues.set(
+                    (ci as { id: string; connector: string | null; status: string | null; error: string | null }[]).filter(
+                        (x) => x.error || ['LOGIN_ERROR', 'OUTDATED', 'WAITING_USER_INPUT'].includes(x.status ?? ''),
+                    ),
+                );
+                const lr = l as { amount: number }[];
+                this.late.set({ n: lr.length, sum: lr.reduce((s, r) => s + r.amount, 0) });
+                const row = (mo as { income: number; expense: number }[])[0];
+                this.month.set({ income: row?.income ?? 0, expense: row?.expense ?? 0 });
+                this.daily.set(d as { day: string; expense: number }[]);
+                this.cats.set(c as { category_id: string | null; expense: number }[]);
+                this.bills.set(b as Tx[]);
+                this.invoices.set(i as (Invoice & { due: number })[]);
+                const mrows = mi as { due: number; paid: number }[];
+                this.cardsMonth.set({
+                    total: mrows.reduce((s, r) => s + Math.max(0, r.due) + Math.max(0, r.paid), 0),
+                    due: mrows.reduce((s, r) => s + Math.max(0, r.due), 0),
+                });
+                this.loading.set(false);
+            },
         );
-        const [mo, d, c, b, i, l, mi] = await Promise.all([
-            must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
-            must(sb.rpc('report_by_day', { p_from: addMonths(this.m, -3), p_to: this.hoje })),
-            must(sb.rpc('report_by_category', { p_from: this.m, p_to: monthEnd(this.m) })),
-            must(
-                sb
-                    .from('transactions')
-                    .select('*')
-                    .eq('paid', false)
-                    .not('account_id', 'is', null)
-                    .lt('amount', 0)
-                    .lte('date', addMonths(this.hoje, 1))
-                    .order('date')
-                    .limit(6),
-            ),
-            must(
-                sb
-                    .from('invoices')
-                    .select('*')
-                    .gt('due', 0)
-                    .gte('invoice_date', addMonths(this.hoje, -1))
-                    .lte('invoice_date', addMonths(this.hoje, 2))
-                    .order('invoice_date')
-                    .limit(6),
-            ),
-            // atrasados (como o banner do Organizze): pendentes em conta com data passada
-            must(
-                sb
-                    .from('transactions')
-                    .select('amount')
-                    .eq('paid', false)
-                    .not('account_id', 'is', null)
-                    .is('transfer_id', null)
-                    .lt('date', this.hoje),
-            ),
-            // faturas que vencem neste mês (pagas ou não): total do mês no card de cartões
-            must(sb.from('invoices').select('due, paid').gte('invoice_date', this.m).lte('invoice_date', monthEnd(this.m))),
-        ]);
-        const lr = l as { amount: number }[];
-        this.late.set({ n: lr.length, sum: lr.reduce((s, r) => s + r.amount, 0) });
-        const row = (mo as { income: number; expense: number }[])[0];
-        this.month.set({ income: row?.income ?? 0, expense: row?.expense ?? 0 });
-        this.daily.set(d as { day: string; expense: number }[]);
-        this.cats.set(c as { category_id: string | null; expense: number }[]);
-        this.bills.set(b as Tx[]);
-        this.invoices.set(i as (Invoice & { due: number })[]);
-        const mrows = mi as { due: number; paid: number }[];
-        this.cardsMonth.set({
-            total: mrows.reduce((s, r) => s + Math.max(0, r.due) + Math.max(0, r.paid), 0),
-            due: mrows.reduce((s, r) => s + Math.max(0, r.due), 0),
-        });
-        this.loading.set(false);
     }
 
     openCategory(id: string) {

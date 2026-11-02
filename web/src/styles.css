@@ -1137,7 +1137,7 @@ svg .tick.strong {
 .pace .area {
     fill: var(--out);
     opacity: 0.1;
-    animation: fade 0.9s 0.4s both;
+    animation: fade 0.25s both;
 }
 .pace .end {
     fill: var(--out);
@@ -1281,7 +1281,7 @@ svg .tick.strong {
     background: var(--out);
     border-radius: 0 4px 4px 0;
     transform-origin: left;
-    animation: grow-x 0.8s calc(var(--i, 0) * 55ms) var(--ease) both;
+    animation: grow-x 0.3s calc(var(--i, 0) * 20ms) var(--ease) both;
 }
 .rank.in .fill {
     background: var(--in);
@@ -1322,7 +1322,7 @@ svg .tick.strong {
     border-radius: 5px;
     background: var(--in);
     transform-origin: left;
-    animation: grow-x 0.9s var(--ease) both;
+    animation: grow-x 0.3s var(--ease) both;
 }
 .meter[data-state='warn'] {
     background: color-mix(in oklch, var(--warn) 18%, var(--surface));
@@ -1492,7 +1492,7 @@ details.table-view th:first-child {
         width: 100%;
         max-height: 92dvh;
         border-radius: 24px 24px 0 0;
-        animation: sheet-up 0.42s var(--ease);
+        animation: sheet-up 0.24s var(--ease);
         padding-bottom: env(safe-area-inset-bottom);
     }
 }
@@ -1641,7 +1641,7 @@ kbd {
     border: 1px solid oklch(100% 0 0 / 0.1);
     backdrop-filter: blur(4px);
     font-size: 0.88rem;
-    animation: rise 0.8s var(--ease) both;
+    animation: rise 0.2s var(--ease) both;
 }
 .ledger div:nth-child(2) {
     animation-delay: 0.12s;
@@ -1707,24 +1707,10 @@ kbd {
     }
 }
 
-/* ───────── movimento ───────── */
+/* ───────── movimento ─────────
+   Rápido de propósito: a tela já está pronta em ~100 ms; animação longa parecia demora ao tocar. */
 .reveal > * {
-    animation: rise 0.6s var(--ease) backwards; /* backwards: depois de animar não fica transform, que prenderia os position:fixed (popovers) */
-}
-.reveal > *:nth-child(2) {
-    animation-delay: 50ms;
-}
-.reveal > *:nth-child(3) {
-    animation-delay: 100ms;
-}
-.reveal > *:nth-child(4) {
-    animation-delay: 150ms;
-}
-.reveal > *:nth-child(5) {
-    animation-delay: 200ms;
-}
-.reveal > *:nth-child(6) {
-    animation-delay: 250ms;
+    animation: rise 0.16s var(--ease) backwards; /* backwards: depois de animar não fica transform, que prenderia os position:fixed (popovers) */
 }
 .loading {
     opacity: 0.55;
@@ -1733,7 +1719,7 @@ kbd {
 @keyframes rise {
     from {
         opacity: 0;
-        transform: translateY(12px);
+        transform: translateY(6px);
     }
 }
 @keyframes fade {
@@ -3811,4 +3797,32 @@ body:has(.sel-bar) .toast {
     .drawer.tx[data-kind='transfer'] footer .row:first-child .btn {
         color: var(--paper);
     }
+}
+
+/* resposta imediata ao toque: o item/botão "afunda" na hora, antes de qualquer rede */
+.item.click,
+.btn,
+.tabbar a,
+.tabbar button,
+.fchip,
+.pill,
+.seg button,
+.tabs button,
+.chip {
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+}
+.item.click:active {
+    background: var(--sunk);
+    transition: none;
+}
+.tabbar a:active,
+.tabbar button:active,
+.fchip:active,
+.pill:active,
+.seg button:active,
+.tabs button:active,
+.chip:active {
+    transform: scale(0.96);
+    transition: transform 0.06s;
 }

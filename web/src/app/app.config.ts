@@ -1,11 +1,12 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter, withComponentInputBinding, withViewTransitions } from '@angular/router';
+import { PreloadAllModules, provideRouter, withComponentInputBinding, withPreloading } from '@angular/router';
 import { routes } from './app.routes';
 
 export const appConfig: ApplicationConfig = {
     providers: [
         provideBrowserGlobalErrorListeners(),
-        // View Transitions API: transição nativa entre páginas; query params viram input() (?cat=, ?m=)
-        provideRouter(routes, withViewTransitions({ skipInitialTransition: true }), withComponentInputBinding()),
+        // query params viram input() (?cat=, ?m=)
+        // sem withViewTransitions (a captura + transição atrasava cada troca de tela); telas pré-carregadas = primeiro toque sem download
+        provideRouter(routes, withPreloading(PreloadAllModules), withComponentInputBinding()),
     ],
 };

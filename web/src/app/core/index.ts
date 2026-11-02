@@ -1,4 +1,5 @@
 // Núcleo do app: cliente Supabase, modelos, formatação, estado de UI e Store.
+export * from './cache';
 export * from './format';
 export * from './models';
 export * from './store';

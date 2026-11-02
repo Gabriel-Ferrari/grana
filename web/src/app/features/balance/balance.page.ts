@@ -1,6 +1,6 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { Router } from '@angular/router';
-import { BrlPipe, Store, addMonths, monthEnd, monthLabel, monthStart, must, sb, today } from '../../core';
+import { BrlPipe, Store, addMonths, monthEnd, monthLabel, monthStart, must, sb, today, swr, cached } from '../../core';
 import { BalanceLine, Flow, FlowMonth } from '../../shared/ui/charts';
 import { Icon } from '../../shared/ui/icon';
 
@@ -139,17 +139,23 @@ export class Balance {
     }
 
     async fetch(m: string) {
-        this.loading.set(true);
         const end = monthEnd(m) < today() ? monthEnd(m) : today();
-        const [d, mo] = await Promise.all([
-            m <= today()
-                ? sb.rpc('balance_by_day', { p_from: m, p_to: end }).then((r) => (r.data ?? []) as Day[])
-                : Promise.resolve([] as Day[]),
-            must(sb.rpc('report_by_month', { p_from: addMonths(m, -5), p_to: monthEnd(m) })),
-        ]);
-        this.days.set(d);
-        this.months.set(mo as Month[]);
-        this.loading.set(false);
+        if (!cached('bal:' + m)) this.loading.set(true);
+        await swr(
+            'bal:' + m,
+            () =>
+                Promise.all([
+                    m <= today()
+                        ? sb.rpc('balance_by_day', { p_from: m, p_to: end }).then((r) => (r.data ?? []) as Day[])
+                        : Promise.resolve([] as Day[]),
+                    must(sb.rpc('report_by_month', { p_from: addMonths(m, -5), p_to: monthEnd(m) })),
+                ]),
+            ([d, mo]) => {
+                this.days.set(d);
+                this.months.set(mo as Month[]);
+                this.loading.set(false);
+            },
+        );
     }
 
     go(n: number) {
