@@ -6,7 +6,7 @@ lançamentos automáticos a partir das **notificações dos bancos** no Android.
 ```
 Android (Grana Coletor) ──POST texto cru──▶ Supabase Edge Function `ingest` ──▶ Postgres (RLS)
                                                parser + conta/cartão + categoria        ▲
-Angular (Cloudflare Pages) ── supabase-js + login Google ─────────────────────────────────┘
+Angular (Cloudflare Workers) ── supabase-js + login Google ─────────────────────────────────┘
 ```
 
 | Pasta | O quê |
@@ -35,6 +35,8 @@ Celular contra o Supabase local: `adb reverse tcp:54321 tcp:54321` e endpoint `h
 
 ## Deploy (tudo grátis)
 
+Produção atual: Supabase `mfsblnrygzwdefvnezas`, Google Cloud `grana-513513`, Cloudflare Worker `grana`.
+
 ### 1. Supabase
 1. Crie um projeto em supabase.com (região São Paulo).
 2. `npx supabase login && npx supabase link --project-ref SEU_REF`
@@ -50,10 +52,10 @@ Celular contra o Supabase local: `adb reverse tcp:54321 tcp:54321` e endpoint `h
 5. **Depois do seu primeiro login**, desligue "Allow new users to sign up" (Authentication → Sign In / Providers).
    Assim só você entra; o RLS já isola os dados por usuário de qualquer forma.
 
-### 3. Frontend (Cloudflare Pages)
-1. Preencha `web/src/env.prod.ts` (Project URL + publishable key — são públicas, RLS protege os dados).
-2. `cd web && npx ng build && npx wrangler pages deploy dist/web/browser --project-name grana`
-   (Pages sem `404.html` já serve o `index.html` para as rotas do SPA.)
+### 3. Frontend (Cloudflare Workers, assets estáticos — grátis)
+1. `web/src/env.prod.ts` tem Project URL + publishable key (públicas; RLS protege os dados).
+2. `cd web && npm run deploy` (build + `wrangler deploy`; config em `web/wrangler.jsonc`, SPA fallback ligado).
+3. No ar: https://grana.ferrari-gabriel2002.workers.dev — Site URL e Redirect URL (`…/**`) já cadastrados no Supabase.
 
 ### 4. Celular
 1. `cd android && ./gradlew assembleDebug && adb install -r build/outputs/apk/debug/grana-coletor-debug.apk`

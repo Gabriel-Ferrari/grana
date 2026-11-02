@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "grana",
+  "compatibility_date": "2026-11-01",
+  "observability": {
+    "enabled": true
+  },
+  // SPA estático (sem código de Worker): assets servidos de graça; rotas desconhecidas -> index.html
+  "assets": {
+    "directory": "dist/web/browser",
+    "not_found_handling": "single-page-application"
+  }
+}
