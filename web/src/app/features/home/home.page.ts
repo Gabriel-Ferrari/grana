@@ -228,8 +228,18 @@ function loadLayout(): HomeCard[] {
                                         </div>
                                         @if (bal().inc > 0) {
                                             <div class="stack" style="gap:1rem">
-                                                <g-meter label="Essenciais" [value]="bal().ess" [max]="bal().inc * 0.5" />
-                                                <g-meter label="Não essenciais" [value]="bal().non" [max]="bal().inc * 0.3" />
+                                                <g-meter
+                                                    label="Essenciais"
+                                                    [value]="bal().ess"
+                                                    [max]="bal().inc * 0.5"
+                                                    [pace]="monthPace()"
+                                                />
+                                                <g-meter
+                                                    label="Não essenciais"
+                                                    [value]="bal().non"
+                                                    [max]="bal().inc * 0.3"
+                                                    [pace]="monthPace()"
+                                                />
                                                 <p
                                                     style="margin:0;font-weight:650"
                                                     [class.neg]="bal().left < bal().inc * 0.2"
@@ -441,8 +451,15 @@ function loadLayout(): HomeCard[] {
                                                 <g-bank [name]="a.name" [institution]="a.institution" />
                                                 <div class="grow">
                                                     <div class="title">{{ a.name }}</div>
-                                                    @if (a.forecast !== a.balance) {
-                                                        <div class="sub">previsto {{ a.forecast | brl }}</div>
+                                                    @if (accForecast(a); as f) {
+                                                        @if (f.total !== a.balance) {
+                                                            <div class="sub">
+                                                                previsto fim do mês {{ f.total | brl }}
+                                                                @if (f.cards) {
+                                                                    · inclui fatura {{ -f.cards | brl }}
+                                                                }
+                                                            </div>
+                                                        }
                                                     }
                                                 </div>
                                                 <span class="amt" [class.neg]="a.balance < 0">{{ a.balance | brl }}</span>
@@ -596,6 +613,16 @@ export class Home {
         return { cur, avg, days, forecast, now, ref, dir, verdict };
     });
     abs = Math.abs;
+    /** previsto da conta + faturas em aberto dos cartões que ela paga (Organizze: "conta de pagamento" do cartão) */
+    accForecast(a: { id: string; forecast: number }) {
+        const end = monthEnd(this.hoje);
+        const cards = this.invoices()
+            .filter((i) => i.invoice_date <= end && this.store.cards().find((c) => c.id === i.card_id)?.payment_account_id === a.id)
+            .reduce((s, i) => s + i.due, 0);
+        return { total: a.forecast - cards, cards };
+    }
+    /** fração do mês já passada: o medidor fica amarelo quando o gasto passa do ritmo */
+    monthPace = computed(() => +this.hoje.slice(8) / +monthEnd(this.m).slice(8));
     /** cards da início: ordem e visibilidade salvas no aparelho (Organizze: "Customize os cards da sua tela inicial") */
     customizing = signal(false);
     layout = signal<HomeCard[]>(loadLayout());

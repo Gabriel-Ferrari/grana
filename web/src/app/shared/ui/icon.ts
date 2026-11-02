@@ -63,6 +63,8 @@ const UI = [
     'delete_sweep',
     'arrow_forward',
     'donut_large',
+    'history',
+    'drag_indicator',
     'event_repeat',
     'splitscreen',
     'savings',

@@ -123,13 +123,25 @@ type Inv = Invoice & { due: number; running_due: number };
             @for (g of groups(); track g.date) {
                 <div class="day">
                     <span>{{ g.label }}</span
-                    ><span class="num">{{ g.sum | brl }}</span>
+                    ><span class="num"
+                        >{{ g.sum | brl }}
+                        @if (dayBal().get(g.date); as b) {
+                            <em class="day-bal" [class.neg]="b < 0" title="Saldo nas contas no fim do dia">· saldo {{ b | brl }}</em>
+                        }
+                    </span>
                 </div>
                 <div class="list">
                     @for (t of g.items; track t.id) {
                         <div
-                            class="item click"
+                            class="item click swipe-row"
                             [class.sel]="sel().has(t.id)"
+                            [style.translate]="swipe().id === t.id ? swipe().dx + 'px 0' : null"
+                            [attr.data-swipe]="swipe().id === t.id ? (swipe().dx > 0 ? 'right' : 'left') : null"
+                            [attr.data-paid-label]="t.paid ? 'Pendente' : 'Pago'"
+                            (pointerdown)="swipeStart(t, $event)"
+                            (pointermove)="swipeMove($event)"
+                            (pointerup)="swipeEnd(t)"
+                            (pointercancel)="swipeCancel()"
                             (click)="rowClick(t, $event)"
                             (contextmenu)="$event.preventDefault(); toggleSel(t)"
                             tabindex="0"
@@ -448,7 +460,45 @@ export class Transactions {
         if (!s.delete(t.id)) s.add(t.id);
         this.sel.set(s);
     }
+    /** deslizar no celular: → marca pago/pendente (conta), ← exclui (com Desfazer) */
+    swipe = signal<{ id: string; dx: number }>({ id: '', dx: 0 });
+    private sw: { id: string; x: number; y: number; active: boolean } | null = null;
+    private justSwiped = false;
+    swipeStart(t: Tx, e: PointerEvent) {
+        if (e.pointerType !== 'touch' || t.source === 'invoice' || this.sel().size) return;
+        this.sw = { id: t.id, x: e.clientX, y: e.clientY, active: false };
+    }
+    swipeMove(e: PointerEvent) {
+        if (!this.sw) return;
+        const dx = e.clientX - this.sw.x,
+            dy = e.clientY - this.sw.y;
+        if (!this.sw.active) {
+            if (Math.abs(dy) > 12) return void (this.sw = null); // é rolagem
+            if (Math.abs(dx) < 12) return;
+            this.sw.active = true;
+        }
+        this.swipe.set({ id: this.sw.id, dx: Math.max(-140, Math.min(140, dx)) });
+    }
+    async swipeEnd(t: Tx) {
+        const s = this.sw;
+        this.sw = null;
+        const dx = this.swipe().dx;
+        this.swipe.set({ id: '', dx: 0 });
+        if (!s?.active) return;
+        this.justSwiped = true;
+        setTimeout(() => (this.justSwiped = false), 350);
+        if (dx > 90 && t.account_id) await this.togglePaid(t);
+        else if (dx < -90)
+            await this.store.withUndo(`${t.description} excluído`, { column: 'id', value: t.id }, () =>
+                must(sb.from('transactions').delete().eq('id', t.id)),
+            );
+    }
+    swipeCancel() {
+        this.sw = null;
+        this.swipe.set({ id: '', dx: 0 });
+    }
     rowClick(t: Tx, e: MouseEvent) {
+        if (this.justSwiped) return;
         if (this.sel().size || e.ctrlKey || e.metaKey || e.shiftKey) this.toggleSel(t);
         else this.open(t);
     }
@@ -502,6 +552,23 @@ export class Transactions {
         );
     }
 
+    /** saldo no fim de cada dia (Organizze): só no modo Caixa ou com uma conta filtrada */
+    afterSum = signal(0);
+    dayBal = computed(() => {
+        const out = new Map<string, number>();
+        if (!(this.isCash() || this.origin().startsWith('a:'))) return out;
+        const ids = this.accIds();
+        const now = this.store
+            .accounts()
+            .filter((a) => ids.has(a.id))
+            .reduce((s, a) => s + a.balance, 0);
+        const moves = this.rows().filter((t) => t.paid && t.account_id && ids.has(t.account_id));
+        for (const g of this.groups()) {
+            const later = moves.filter((t) => t.date > g.date).reduce((s, t) => s + t.amount, 0);
+            out.set(g.date, now - this.afterSum() - later);
+        }
+        return out;
+    });
     setCash(on: boolean) {
         this.cash.set(on);
         localStorage.setItem('grana.cash', on ? '1' : '0');
@@ -585,11 +652,17 @@ export class Transactions {
         if (t === 'a') q = q.eq('account_id', id);
         if (t === 'c') q = q.eq('card_id', id);
         const end = until;
-        const [rows, invs, pend] = await Promise.all([
+        const ids = [...this.accIds()];
+        const [rows, invs, pend, after] = await Promise.all([
             must(q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id')),
             must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
             must(sb.from('transactions').select('amount, account_id').eq('paid', false).not('account_id', 'is', null).lte('date', end)),
+            // o que mexeu nas contas depois do período (para voltar do saldo de hoje até o fim de cada dia)
+            ids.length
+                ? must(sb.from('transactions').select('amount').eq('paid', true).in('account_id', ids).gt('date', end))
+                : Promise.resolve([]),
         ]);
+        this.afterSum.set((after as { amount: number }[]).reduce((s, r) => s + r.amount, 0));
         this.rows.set(rows as Tx[]);
         this.invs.set(invs as Inv[]);
         this.pend.set(pend as { amount: number; account_id: string }[]);

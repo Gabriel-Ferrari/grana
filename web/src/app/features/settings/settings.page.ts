@@ -1,7 +1,7 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { BANKS, Bank, BankLogo, CardArt, NETWORKS, bankOf, bankPackage, networkLogo, bankName, bankColor } from '../../shared/banks';
-import { Store, authError, catIcon, must, notify, sb, toCents, today } from '../../core';
+import { Store, authError, catIcon, must, notify, sb, toCents, today, suggestPrefs, setSuggestPrefs, byPosition } from '../../core';
 import { CATEGORY_ICONS, Icon } from '../../shared/ui/icon';
 import { OpenFinance } from '../banks/open-finance';
 
@@ -21,7 +21,7 @@ type Row = Record<string, any>;
                     <button class="btn" (click)="create('accounts')"><g-icon name="add" [size]="18" />Conta</button>
                 </div>
                 <div class="list">
-                    @for (a of rows().accounts; track a['id']) {
+                    @for (a of rows().accounts; track a['id']; let i = $index) {
                         <div class="item click" (click)="open('accounts', a)" tabindex="0" (keydown.enter)="open('accounts', a)">
                             <g-bank [name]="a['name']" [institution]="a['institution']" />
                             <div class="grow">
@@ -39,6 +39,33 @@ type Row = Record<string, any>;
                                     }
                                 </div>
                             </div>
+                            @if (store.v3()) {
+                                <span
+                                    class="order-btns"
+                                    (click)="$event.stopPropagation()"
+                                    (keydown.enter)="$event.stopPropagation()"
+                                    tabindex="-1"
+                                >
+                                    <button
+                                        class="btn ghost icon"
+                                        (click)="move('accounts', rows().accounts, i, -1)"
+                                        [disabled]="i === 0"
+                                        aria-label="Subir"
+                                        title="Subir"
+                                    >
+                                        <g-icon name="arrow_upward" [size]="16" />
+                                    </button>
+                                    <button
+                                        class="btn ghost icon"
+                                        (click)="move('accounts', rows().accounts, i, 1)"
+                                        [disabled]="i === rows().accounts.length - 1"
+                                        aria-label="Descer"
+                                        title="Descer"
+                                    >
+                                        <g-icon name="arrow_downward" [size]="16" />
+                                    </button>
+                                </span>
+                            }
                             <g-icon name="chevron_right" class="muted" />
                         </div>
                     }
@@ -51,7 +78,7 @@ type Row = Record<string, any>;
                     <button class="btn" (click)="create('cards')"><g-icon name="add" [size]="18" />Cartão</button>
                 </div>
                 <div class="list">
-                    @for (c of rows().cards; track c['id']) {
+                    @for (c of rows().cards; track c['id']; let i = $index) {
                         <div class="item click" (click)="open('cards', c)" tabindex="0" (keydown.enter)="open('cards', c)">
                             <g-card-art
                                 [name]="c['name']"
@@ -77,6 +104,33 @@ type Row = Record<string, any>;
                             </div>
                             @if (networkLogo(c['network']); as n) {
                                 <img class="net-logo" [src]="n" alt="" referrerpolicy="no-referrer" />
+                            }
+                            @if (store.v3()) {
+                                <span
+                                    class="order-btns"
+                                    (click)="$event.stopPropagation()"
+                                    (keydown.enter)="$event.stopPropagation()"
+                                    tabindex="-1"
+                                >
+                                    <button
+                                        class="btn ghost icon"
+                                        (click)="move('cards', rows().cards, i, -1)"
+                                        [disabled]="i === 0"
+                                        aria-label="Subir"
+                                        title="Subir"
+                                    >
+                                        <g-icon name="arrow_upward" [size]="16" />
+                                    </button>
+                                    <button
+                                        class="btn ghost icon"
+                                        (click)="move('cards', rows().cards, i, 1)"
+                                        [disabled]="i === rows().cards.length - 1"
+                                        aria-label="Descer"
+                                        title="Descer"
+                                    >
+                                        <g-icon name="arrow_downward" [size]="16" />
+                                    </button>
+                                </span>
                             }
                             <g-icon name="chevron_right" class="muted" />
                         </div>
@@ -111,6 +165,33 @@ type Row = Record<string, any>;
                                     <div class="grow">
                                         <div class="title">{{ c['name'] }}</div>
                                     </div>
+                                    @if (store.v3()) {
+                                        <span
+                                            class="order-btns"
+                                            (click)="$event.stopPropagation()"
+                                            (keydown.enter)="$event.stopPropagation()"
+                                            tabindex="-1"
+                                        >
+                                            <button
+                                                class="btn ghost icon"
+                                                (click)="move('categories', sibs(c), sibs(c).indexOf(c), -1)"
+                                                [disabled]="sibs(c).indexOf(c) === 0"
+                                                aria-label="Subir"
+                                                title="Subir"
+                                            >
+                                                <g-icon name="arrow_upward" [size]="16" />
+                                            </button>
+                                            <button
+                                                class="btn ghost icon"
+                                                (click)="move('categories', sibs(c), sibs(c).indexOf(c), 1)"
+                                                [disabled]="sibs(c).indexOf(c) === sibs(c).length - 1"
+                                                aria-label="Descer"
+                                                title="Descer"
+                                            >
+                                                <g-icon name="arrow_downward" [size]="16" />
+                                            </button>
+                                        </span>
+                                    }
                                     <g-icon name="chevron_right" class="muted" />
                                 </div>
                             }
@@ -166,6 +247,28 @@ type Row = Record<string, any>;
                         </div>
                     </div>
                 }
+            </div>
+        </section>
+
+        <section class="panel reveal">
+            <div class="panel-head"><h2>Sugestões de descrição</h2></div>
+            <p class="muted small" style="margin:0 0 .8rem">
+                Ao digitar a descrição de um lançamento novo, o grana sugere as que você já usou (e a categoria delas).
+            </p>
+            <div class="row wrap end">
+                <label style="min-width:200px"
+                    >Histórico considerado
+                    <select name="sm" [ngModel]="sugg().months" (ngModelChange)="setSugg({ months: +$event })">
+                        <option [ngValue]="3">Últimos 3 meses</option>
+                        <option [ngValue]="6">Últimos 6 meses</option>
+                        <option [ngValue]="12">Últimos 12 meses</option>
+                        <option [ngValue]="0">Todo o histórico</option>
+                    </select></label
+                >
+                <label class="check"
+                    ><input name="so" type="checkbox" [ngModel]="sugg().sameOrigin" (ngModelChange)="setSugg({ sameOrigin: $event })" /> Só
+                    da conta ou cartão escolhido no lançamento</label
+                >
             </div>
         </section>
 
@@ -395,6 +498,10 @@ export class Settings {
         const q = this.bankQuery().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         return BANKS.filter((b) => !q || b.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').includes(q));
     });
+    sugg = suggestPrefs;
+    setSugg(p: Partial<{ months: number; sameOrigin: boolean }>) {
+        setSuggestPrefs({ ...suggestPrefs(), ...p });
+    }
     tags = signal<{ tag: string; n: number }[]>([]);
     tagEdit = signal('');
     tagNew = '';
@@ -409,6 +516,18 @@ export class Settings {
         });
     }
 
+    /** irmãos na ordem (mesmo tipo e mesma categoria-mãe): é entre eles que as setas trocam */
+    sibs(c: Row) {
+        return this.rows().categories.filter((x) => x['kind'] === c['kind'] && (x['parent_id'] ?? null) === (c['parent_id'] ?? null));
+    }
+    /** troca de lugar com o vizinho e grava a ordem (position) de toda a lista */
+    async move(kind: Kind, list: Row[], i: number, d: number) {
+        const l = [...list];
+        if (!l[i + d]) return;
+        [l[i], l[i + d]] = [l[i + d], l[i]];
+        await Promise.all(l.map((r, pos) => (r['position'] === pos ? null : sb.from(kind).update({ position: pos }).eq('id', r['id']))));
+        await this.store.load();
+    }
     catsOf(kind: string) {
         const all = this.rows().categories.filter((c) => c['kind'] === kind);
         return all.filter((c) => !c['parent_id']).flatMap((p) => [p, ...all.filter((c) => c['parent_id'] === p['id'])]);
@@ -421,7 +540,7 @@ export class Settings {
             must(sb.from('categories').select('*').order('name')),
             sb.rpc('report_by_tag', { p_from: '2000-01-01', p_to: '2100-12-31' }).then((r) => r.data ?? []),
         ]);
-        this.rows.set({ accounts: a, cards: c, categories: k });
+        this.rows.set({ accounts: [...a].sort(byPosition), cards: [...c].sort(byPosition), categories: [...k].sort(byPosition) });
         this.tags.set((t as { tag: string; n: number }[]).sort((x, y) => x.tag.localeCompare(y.tag)));
     }
 

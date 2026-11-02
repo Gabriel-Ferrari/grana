@@ -44,3 +44,20 @@ export function authError(msg: string): string {
     if (/same.*password|different from the old/i.test(msg)) return 'A nova senha precisa ser diferente da atual.';
     return msg;
 }
+
+/** Sugestões de descrição no formulário (como no Organizze): até onde o histórico vale e de quais contas/cartões. */
+export interface SuggestPrefs {
+    /** meses de histórico (0 = tudo) */
+    months: number;
+    /** só da conta/cartão escolhido no formulário */
+    sameOrigin: boolean;
+}
+export const suggestPrefs = signal<SuggestPrefs>({
+    months: 12,
+    sameOrigin: false,
+    ...(JSON.parse(localStorage.getItem('grana.sugg') ?? '{}') as Partial<SuggestPrefs>),
+});
+export function setSuggestPrefs(p: SuggestPrefs) {
+    suggestPrefs.set(p);
+    localStorage.setItem('grana.sugg', JSON.stringify(p));
+}

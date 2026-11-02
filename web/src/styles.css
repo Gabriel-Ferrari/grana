@@ -3542,3 +3542,102 @@ body:has(.sel-bar) .toast {
         height: 190px;
     }
 }
+
+/* sugestões de descrição */
+.desc-hints {
+    display: flex;
+    flex: none; /* o corpo do formulário é flex: sem isto a lista era espremida a 2px */
+    flex-direction: column;
+    margin: -0.3rem 0 0.4rem;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+}
+.desc-hints button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.75rem;
+    border: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.desc-hints button:last-child {
+    border-bottom: 0;
+}
+.desc-hints button:hover {
+    background: var(--sunk);
+}
+.desc-hints .ms {
+    font-size: 18px;
+    color: var(--muted);
+}
+.desc-hints b {
+    flex: 1;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.desc-hints .muted {
+    font-size: 0.8rem;
+}
+
+/* relatório: lançamentos da categoria abertos ali mesmo */
+.cat-detail {
+    margin: 0 0 0.6rem 2.6rem;
+    padding: 0.2rem 0.6rem 0.4rem;
+    border-left: 2px solid var(--line);
+}
+.cat-detail .item {
+    padding-block: 0.45rem;
+}
+.cat-detail .title {
+    font-weight: 600;
+    font-size: 0.92rem;
+}
+.cat-list .item.sel {
+    background: var(--sunk);
+}
+
+/* lançamentos: saldo no fim do dia */
+.day-bal {
+    font-style: normal;
+    font-weight: 600;
+    color: var(--muted);
+    margin-left: 0.25rem;
+}
+
+/* deslizar lançamento (celular): fundo indica a ação */
+@media (hover: none) {
+    .swipe-row {
+        touch-action: pan-y;
+    }
+}
+.swipe-row[data-swipe] {
+    transition: none;
+    border-radius: 14px;
+}
+.swipe-row[data-swipe='right'] {
+    box-shadow: -160px 0 0 0 color-mix(in oklch, var(--in) 22%, transparent) inset;
+}
+.swipe-row[data-swipe='left'] {
+    box-shadow: 160px 0 0 0 color-mix(in oklch, var(--out) 22%, transparent) inset;
+}
+
+/* ajustes: setas de ordem */
+.order-btns {
+    display: inline-flex;
+    gap: 0.1rem;
+    flex: none;
+}
+.order-btns .btn.icon {
+    padding: 0.3rem;
+}
+.order-btns .btn:disabled {
+    opacity: 0.25;
+}

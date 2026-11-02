@@ -1,7 +1,7 @@
 import { Injectable, computed, signal } from '@angular/core';
 import { Session } from '@supabase/supabase-js';
 import type { TxDraft } from '../features/transactions/tx-form';
-import { Account, Card, Category } from './models';
+import { Account, Card, Category, byPosition } from './models';
 import { must, sb } from './supabase';
 import { notify } from './ui-state';
 
@@ -23,6 +23,8 @@ export class Store {
 
     catById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
     /** banco já tem a migração 20261102080000 (anexos, essenciais, balanço…)? Até lá, essas partes ficam escondidas. */
+    /** migração 20261102090000 (ordem manual) já está no banco? */
+    v3 = computed(() => this.accounts().some((a) => a.position !== undefined));
     v2 = computed(() => this.categories().some((c) => c.essential !== undefined));
     originName = computed(() => {
         const m = new Map<string, string>();
@@ -60,9 +62,9 @@ export class Store {
             sb.from('notifications').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
             sb.from('transactions').select('id', { count: 'exact', head: true }).eq('reviewed', false),
         ]);
-        this.accounts.set((a.data ?? []) as Account[]);
-        this.cards.set((c.data ?? []) as Card[]);
-        this.categories.set((k.data ?? []) as Category[]);
+        this.accounts.set(((a.data ?? []) as Account[]).sort(byPosition));
+        this.cards.set(((c.data ?? []) as Card[]).sort(byPosition));
+        this.categories.set(((k.data ?? []) as Category[]).sort(byPosition));
         this.pending.set(n.count ?? 0);
         this.toReview.set(r.count ?? 0);
         this.version.update((v) => v + 1);

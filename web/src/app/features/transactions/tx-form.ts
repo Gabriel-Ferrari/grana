@@ -1,6 +1,6 @@
 import { Component, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Store, Tx, addMonths, brl, catIcon, invoiceDue, must, notify, sb, today } from '../../core';
+import { Store, Tx, addMonths, brl, catIcon, invoiceDue, must, notify, sb, today, suggestPrefs } from '../../core';
 import { ChipOption, ChipSelect, DatePick, Keypad, Money } from '../../shared/ui/fields';
 import { Icon } from '../../shared/ui/icon';
 
@@ -96,6 +96,19 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                                 autocomplete="off"
                         /></span>
                     </label>
+                    @if (descHints().length) {
+                        <!-- descrições já usadas (Organizze): toque preenche descrição e categoria -->
+                        <div class="desc-hints" role="listbox" aria-label="Descrições usadas antes">
+                            @for (h of descHints(); track h.description) {
+                                <button type="button" role="option" aria-selected="false" (click)="useDesc(h)">
+                                    <span class="ms">history</span><b>{{ h.description }}</b>
+                                    @if (store.catById().get(h.category_id ?? ''); as c) {
+                                        <span class="muted">{{ c.name }}</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                    }
                     @if (hints().length && !f.category_id) {
                         <div class="suggest-row">
                             <g-icon name="auto_awesome" [size]="16" />
@@ -549,10 +562,51 @@ export class TxForm implements OnInit {
     }
 
     /** Categorias pelo histórico: as mais usadas com a mesma descrição (até 3), como no YNAB. */
+    /** descrições já usadas que contêm o texto digitado (janela e origem configuráveis em Ajustes) */
+    descHints = signal<{ description: string; category_id: string | null }[]>([]);
+    useDesc(h: { description: string; category_id: string | null }) {
+        this.f.description = h.description;
+        if (
+            !this.f.category_id &&
+            h.category_id &&
+            this.store.catById().get(h.category_id)?.kind === (this.kind() === 'income' ? 'income' : 'expense')
+        )
+            this.f.category_id = h.category_id;
+        this.descHints.set([]);
+        this.hints.set([]);
+    }
+    private async loadDescHints(desc: string) {
+        if (this.draft().id || desc.length < 2) return this.descHints.set([]);
+        const pr = suggestPrefs();
+        let q = sb
+            .from('transactions')
+            .select('description, category_id')
+            .ilike('description', '%' + desc.replace(/[%_\\]/g, '\\$&') + '%')
+            .is('transfer_id', null)
+            .is('pays_card_id', null);
+        if (pr.months) q = q.gte('date', addMonths(today(), -pr.months));
+        if (pr.sameOrigin) {
+            const o = this.origin();
+            q = o.card_id ? q.eq('card_id', o.card_id) : o.account_id ? q.eq('account_id', o.account_id) : q;
+        }
+        const { data } = await q.order('date', { ascending: false }).limit(120);
+        // mais usadas primeiro; a mesma descrição (sem espaço/caixa) conta uma vez, com a categoria mais recente
+        const seen = new Map<string, { description: string; category_id: string | null; n: number }>();
+        for (const r of (data ?? []) as { description: string; category_id: string | null }[]) {
+            const k = r.description.trim().toLowerCase();
+            if (k === desc.toLowerCase()) continue;
+            const e = seen.get(k);
+            if (e) e.n++;
+            else seen.set(k, { description: r.description.trim(), category_id: r.category_id, n: 1 });
+        }
+        this.descHints.set([...seen.values()].sort((a, b) => b.n - a.n).slice(0, 5));
+    }
+
     suggestSoon() {
         clearTimeout(this.timer);
         this.timer = setTimeout(async () => {
             const desc = this.f.description.trim();
+            void this.loadDescHints(desc);
             if (desc.length < 3 || this.f.category_id) return this.hints.set([]);
             const { data } = await sb
                 .from('transactions')

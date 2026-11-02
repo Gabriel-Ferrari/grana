@@ -69,11 +69,18 @@ import { Icon } from '../../shared/ui/icon';
                             <g-donut
                                 [items]="catItems()"
                                 [caption]="catKind() === 'exp' ? 'Despesas' : 'Receitas'"
-                                (pick)="openCat($event)"
+                                (pick)="toggleCat($event)"
                             />
                             <div class="list cat-list">
                                 @for (c of catItems(); track c.id) {
-                                    <div class="item click" (click)="openCat(c.id)" (keydown.enter)="openCat(c.id)" tabindex="0">
+                                    <div
+                                        class="item click"
+                                        [class.sel]="openedCat() === c.id"
+                                        (click)="toggleCat(c.id)"
+                                        (keydown.enter)="toggleCat(c.id)"
+                                        tabindex="0"
+                                        [attr.aria-expanded]="openedCat() === c.id"
+                                    >
                                         <span class="cat-ico" [style.--cc]="c.color"
                                             ><span class="ms">{{ c.icon }}</span></span
                                         >
@@ -88,6 +95,36 @@ import { Icon } from '../../shared/ui/icon';
                                             ><span>{{ pct(c.value) }}%</span>
                                         </div>
                                     </div>
+                                    @if (openedCat() === c.id) {
+                                        <div class="cat-detail" [class.loading]="catTxLoading()">
+                                            @for (t of catTx(); track t.id) {
+                                                <div
+                                                    class="item click"
+                                                    (click)="store.open(t)"
+                                                    (keydown.enter)="store.open(t)"
+                                                    tabindex="0"
+                                                >
+                                                    <div class="grow">
+                                                        <div class="title">{{ t.description }}</div>
+                                                        <div class="sub">
+                                                            {{ t.date | dmy: true }} ·
+                                                            {{ store.originName().get(t.account_id ?? t.card_id ?? '') }}
+                                                        </div>
+                                                    </div>
+                                                    <span class="amt" [class.neg]="t.amount < 0" [class.pos]="t.amount > 0">{{
+                                                        t.amount | brl
+                                                    }}</span>
+                                                </div>
+                                            } @empty {
+                                                @if (!catTxLoading()) {
+                                                    <p class="muted small" style="margin:.4rem 0">Nenhum lançamento.</p>
+                                                }
+                                            }
+                                            <a class="more-link" (click)="openCat(c.id)" (keydown.enter)="openCat(c.id)" tabindex="0"
+                                                >Ver em Lançamentos <g-icon name="chevron_right" [size]="18"
+                                            /></a>
+                                        </div>
+                                    }
                                 }
                             </div>
                         } @else {
@@ -234,6 +271,35 @@ export class Reports {
     ] as const;
     tab = signal<'cat' | 'bal' | 'tags' | 'rec'>('cat');
     catKind = signal<'exp' | 'inc'>('exp');
+    /** categoria aberta no relatório: lançamentos dela no período, do maior valor para o menor (Organizze) */
+    openedCat = signal('');
+    catTx = signal<Tx[]>([]);
+    catTxLoading = signal(false);
+    async toggleCat(id: string) {
+        if (id === '__other' || this.openedCat() === id) return this.openedCat.set('');
+        this.openedCat.set(id);
+        this.catTxLoading.set(true);
+        this.catTx.set([]);
+        const ids = [
+            id,
+            ...this.store
+                .categories()
+                .filter((c) => c.parent_id === id)
+                .map((c) => c.id),
+        ];
+        let q = sb
+            .from('transactions')
+            .select('*')
+            .gte('date', this.from() + '-01')
+            .lte('date', monthEnd(this.to() + '-01'))
+            .is('transfer_id', null)
+            .is('pays_card_id', null);
+        q = id === 'none' ? q.is('category_id', null) : q.in('category_id', ids);
+        q = this.catKind() === 'exp' ? q.lt('amount', 0).order('amount') : q.gt('amount', 0).order('amount', { ascending: false });
+        const rows = (await must(q.limit(300))) as Tx[];
+        if (this.openedCat() === id) this.catTx.set(rows);
+        this.catTxLoading.set(false);
+    }
     catItems = computed(() =>
         (this.catKind() === 'exp' ? this.expenses() : this.incomes()).filter((c) => c.value > 0).sort((a, b) => b.value - a.value),
     );
