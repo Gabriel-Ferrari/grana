@@ -1,9 +1,11 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { BrlPipe, Store, Tx, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../core';
+import { BrlPipe, Invoice, Store, Tx, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../core';
 import { Icon } from '../icon';
 import { ChipOption, ChipSelect } from '../fields';
+
+type Inv = Invoice & { due: number; running_due: number };
 
 @Component({
   imports: [BrlPipe, FormsModule, Icon, ChipSelect],
@@ -25,6 +27,10 @@ import { ChipOption, ChipSelect } from '../fields';
     </div>
 
     <div class="chips-row reveal" role="toolbar" aria-label="Filtros">
+      <div class="seg" role="group" aria-label="Modo de visualização">
+        <button [class.on]="!cash()" (click)="setCash(false)" title="Todos os lançamentos, inclusive compras no cartão">Tudo</button>
+        <button [class.on]="cash()" (click)="setCash(true)" title="Fluxo de caixa: só o que mexe no saldo; faturas no lugar das compras do cartão">Caixa</button>
+      </div>
       <g-chip-select label="Contas e cartões" [options]="originOptions()" [value]="origin()" (valueChange)="setParam('o', $event)" />
       <g-chip-select label="Tipo" [options]="kindOptions" [value]="kind()" (valueChange)="kind.set($any($event))" />
       <g-chip-select label="Categoria" [options]="catOptions()" [value]="catSel()" (valueChange)="setParam('cat', $event)" />
@@ -34,18 +40,26 @@ import { ChipOption, ChipSelect } from '../fields';
       }
     </div>
 
+    @if (isCash()) {
+      <section class="sum-strip reveal">
+        <div><span>Saldo hoje</span><b [class.neg]="cashBox().now < 0">{{ cashBox().now | brl }}</b></div>
+        <div><span>Resultado do mês</span><b [class.neg]="cashBox().result < 0">{{ cashBox().result | brl }}</b></div>
+        <div><span>Previsto em {{ endLabel() }}</span><b [class.neg]="cashBox().end < 0">{{ cashBox().end | brl }}</b></div>
+      </section>
+    } @else {
     <section class="sum-strip reveal">
       <div><span>Entradas</span><b class="pos">{{ totals().inc | brl }}</b></div>
       <div><span>Saídas</span><b class="neg">{{ -totals().exp | brl }}</b></div>
       <div><span>Resultado</span><b [class.neg]="totals().inc + totals().exp < 0">{{ totals().inc + totals().exp | brl }}</b></div>
     </section>
+    }
 
     <section class="panel reveal" [class.loading]="loading()">
       @for (g of groups(); track g.date) {
         <div class="day"><span>{{ g.label }}</span><span class="num">{{ g.sum | brl }}</span></div>
         <div class="list">
           @for (t of g.items; track t.id) {
-            <div class="item click" (click)="store.open(t)" tabindex="0" (keydown.enter)="store.open(t)">
+            <div class="item click" (click)="open(t)" tabindex="0" (keydown.enter)="open(t)">
               <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
               <div class="grow">
                 <div class="title">@if (!t.reviewed) {<i class="unrev" title="Para revisar"></i>}{{ t.description }}
@@ -56,7 +70,7 @@ import { ChipOption, ChipSelect } from '../fields';
                   @for (tag of t.tags; track tag) { <span class="tag"><g-icon name="sell" [size]="13" />{{ tag }}</span> }
                 </div>
                 <div class="sub">
-                  {{ store.catById().get(t.category_id ?? '')?.name ?? (t.transfer_id ? 'Transferência' : t.pays_card_id ? 'Pagamento de fatura' : 'Sem categoria') }}
+                  {{ t.source === 'invoice' ? 'Fatura a pagar' : store.catById().get(t.category_id ?? '')?.name ?? (t.transfer_id ? 'Transferência' : t.pays_card_id ? 'Pagamento de fatura' : 'Sem categoria') }}
                   · <g-icon [name]="t.card_id ? 'credit_card' : 'account_balance'" [size]="14" />{{ store.originName().get(t.account_id ?? t.card_id ?? '') }}
                 </div>
               </div>
@@ -91,9 +105,10 @@ export class Transactions {
   origin = computed(() => this.o() ?? '');
   q = signal('');
   searching = signal(false);
-  kind = signal<'' | 'in' | 'out'>('');
+  kind = signal<'' | 'in' | 'out' | 'tr' | 'fixo' | 'parc'>('');
   paidSel = signal<'' | 'paid' | 'open'>('');
-  kindOptions: ChipOption[] = [{ value: 'out', label: 'Saídas', icon: 'arrow_upward', color: 'var(--out)' }, { value: 'in', label: 'Entradas', icon: 'arrow_downward', color: 'var(--in)' }];
+  kindOptions: ChipOption[] = [{ value: 'out', label: 'Saídas', icon: 'arrow_upward', color: 'var(--out)' }, { value: 'in', label: 'Entradas', icon: 'arrow_downward', color: 'var(--in)' },
+    { value: 'tr', label: 'Transferências', icon: 'swap_horiz' }, { value: 'fixo', label: 'Fixos', icon: 'event_repeat' }, { value: 'parc', label: 'Parcelados', icon: 'splitscreen' }];
   paidOptions: ChipOption[] = [{ value: 'paid', label: 'Pagos', icon: 'thumb_up', color: 'var(--in)' }, { value: 'open', label: 'Pendentes', icon: 'schedule', color: 'var(--warn)' }];
   originOptions = computed<ChipOption[]>(() => [
     ...this.store.accounts().filter((a) => !a.archived).map((a) => ({ value: 'a:' + a.id, label: a.name, group: 'Contas', bank: { name: a.name, institution: a.institution } })),
@@ -108,23 +123,68 @@ export class Transactions {
   loading = signal(true);
 
   label = computed(() => monthLabel(this.month()));
-  icon = (t: Tx) => (t.transfer_id ? 'swap_horiz' : t.pays_card_id ? 'credit_card' : catIcon(this.store.catById().get(t.category_id ?? '')));
+  icon = (t: Tx) => (t.source === 'invoice' ? 'receipt_long' : t.transfer_id ? 'swap_horiz' : t.pays_card_id ? 'credit_card' : catIcon(this.store.catById().get(t.category_id ?? '')));
+
+  /** Fluxo de caixa (como no Organizze): sem compras do cartão; a fatura em aberto entra como uma linha no vencimento. */
+  cash = signal(localStorage.getItem('grana.cash') === '1');
+  isCash = computed(() => this.cash() && !this.origin().startsWith('c:'));
+  /** faturas dos últimos meses até o fim do mês e lançamentos de conta pendentes até lá (para a previsão) */
+  invs = signal<Inv[]>([]);
+  pend = signal<{ amount: number; account_id: string }[]>([]);
+  accIds = computed(() => {
+    const [t, id] = this.origin().split(':');
+    return new Set(t === 'a' ? [id] : this.store.accounts().filter((a) => !a.archived).map((a) => a.id));
+  });
+  scopedInvs = computed(() => {
+    const [t, id] = this.origin().split(':');
+    return this.invs().filter((i) => t !== 'a' || this.store.cards().find((c) => c.id === i.card_id)?.payment_account_id === id);
+  });
+  invRows = computed<Tx[]>(() => this.scopedInvs().filter((i) => i.invoice_date >= this.month() && i.due > 0).map((i) => ({
+    id: 'inv:' + i.card_id + ':' + i.invoice_date, description: 'Fatura ' + (this.store.originName().get(i.card_id) ?? ''), amount: -i.due,
+    date: i.invoice_date, paid: false, account_id: null, card_id: i.card_id, invoice_date: i.invoice_date, pays_card_id: null,
+    category_id: null, transfer_id: null, group_id: null, installment: null, installments: null, recurring: false, tags: [], notes: null,
+    source: 'invoice', reviewed: true,
+  })));
+  /** dívida de cartão até o fim do mês: saldo acumulado (running_due) da última fatura de cada cartão — não soma resíduos antigos duas vezes */
+  owed = computed(() => {
+    const last = new Map<string, Inv>();
+    for (const i of this.scopedInvs()) if ((last.get(i.card_id)?.invoice_date ?? '') < i.invoice_date) last.set(i.card_id, i);
+    return [...last.values()].reduce((s, i) => s + Math.max(0, i.running_due), 0);
+  });
+  endLabel = computed(() => new Date(monthEnd(this.month()) + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }));
+  cashBox = computed(() => {
+    const ids = this.accIds();
+    const now = this.store.accounts().filter((a) => ids.has(a.id)).reduce((s, a) => s + a.balance, 0);
+    const end = now + this.pend().filter((p) => ids.has(p.account_id)).reduce((s, p) => s + p.amount, 0)
+      - this.owed();
+    const result = this.filtered().filter((t) => !t.transfer_id).reduce((s, t) => s + t.amount, 0);
+    return { now, end, result };
+  });
+  setCash(on: boolean) { this.cash.set(on); localStorage.setItem('grana.cash', on ? '1' : '0'); }
+  open(t: Tx) {
+    if (t.source === 'invoice') this.router.navigate(['/cartoes'], { queryParams: { c: t.card_id } });
+    else this.store.open(t);
+  }
 
   filtered = computed(() => {
     const q = this.q().toLowerCase().trim();
     const cat = this.catSel(), k = this.kind();
     const byId = this.store.catById();
-    return this.rows().filter((t) =>
+    const base = this.isCash()
+      ? [...this.rows().filter((t) => !t.card_id), ...this.invRows()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+      : this.rows();
+    return base.filter((t) =>
       (!q || t.description.toLowerCase().includes(q) || t.tags.some((g) => g.toLowerCase().includes(q))) &&
-      (!cat || (cat === 'none' ? !t.category_id && !t.transfer_id && !t.pays_card_id : t.category_id === cat || byId.get(t.category_id ?? '')?.parent_id === cat)) &&
-      (!k || (k === 'in' ? t.amount > 0 : t.amount < 0)) &&
+      (!cat || (cat === 'none' ? !t.category_id && !t.transfer_id && !t.pays_card_id && t.source !== 'invoice' : t.category_id === cat || byId.get(t.category_id ?? '')?.parent_id === cat)) &&
+      (!k || (k === 'in' ? t.amount > 0 && !t.transfer_id : k === 'out' ? t.amount < 0 && !t.transfer_id
+        : k === 'tr' ? !!t.transfer_id : k === 'fixo' ? t.recurring : !!t.installments)) &&
       (!this.paidSel() || (this.paidSel() === 'paid' ? t.paid : !t.paid)));
   });
   groups = computed(() => {
     const m = new Map<string, Tx[]>();
     for (const t of this.filtered()) m.set(t.date, [...(m.get(t.date) ?? []), t]);
     return [...m].map(([date, items]) => ({
-      date, items, sum: items.filter((t) => !t.transfer_id && !t.pays_card_id).reduce((s, t) => s + t.amount, 0),
+      date, items, sum: items.filter((t) => !t.transfer_id && (this.isCash() || !t.pays_card_id)).reduce((s, t) => s + t.amount, 0),
       label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' }),
     }));
   });
@@ -147,7 +207,15 @@ export class Transactions {
     const [t, id] = origin.split(':');
     if (t === 'a') q = q.eq('account_id', id);
     if (t === 'c') q = q.eq('card_id', id);
-    this.rows.set(await must(q.order('date', { ascending: false }).order('created_at', { ascending: false })) as Tx[]);
+    const end = monthEnd(month);
+    const [rows, invs, pend] = await Promise.all([
+      must(q.order('date', { ascending: false }).order('created_at', { ascending: false })),
+      must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
+      must(sb.from('transactions').select('amount, account_id').eq('paid', false).not('account_id', 'is', null).lte('date', end)),
+    ]);
+    this.rows.set(rows as Tx[]);
+    this.invs.set(invs as Inv[]);
+    this.pend.set(pend as { amount: number; account_id: string }[]);
     this.loading.set(false);
   }
 

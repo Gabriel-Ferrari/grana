@@ -109,6 +109,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
           @if (draft().id) {
             <button type="button" class="btn ghost danger" (click)="remove(false)"><g-icon name="delete" [size]="18" />Excluir</button>
             @if (draft().group_id) { <button type="button" class="btn ghost danger" (click)="remove(true)">e próximos</button> }
+            @if (kind() !== 'transfer') { <button type="button" class="btn ghost" (click)="duplicate()" title="Novo lançamento igual, com data de hoje"><g-icon name="content_copy" [size]="18" />Duplicar</button> }
           }
         </div>
         <div class="row">
@@ -305,6 +306,17 @@ export class TxForm implements OnInit {
     } finally {
       this.busy.set(false);
     }
+  }
+
+  /** Abre um lançamento novo com os mesmos dados (data de hoje), como no Organizze. */
+  duplicate() {
+    const draft: TxDraft = {
+      kind: this.kind(), description: this.f.description, amount: (this.kind() === 'income' ? 1 : -1) * this.f.cents, date: today(),
+      paid: this.f.paid, category_id: this.f.category_id || null, notes: this.f.notes || null, ...this.origin(),
+      tags: this.f.tags.split(',').map((t) => t.trim()).filter(Boolean),
+    };
+    this.store.form.set(null); // recria o formulário
+    setTimeout(() => this.store.open(draft));
   }
 
   async remove(following: boolean) {
