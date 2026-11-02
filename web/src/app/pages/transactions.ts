@@ -1,7 +1,7 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, HostListener, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
-import { BrlPipe, Invoice, Store, Tx, addMonths, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../core';
+import { BrlPipe, Invoice, Store, Tx, addMonths, notify, catIcon, monthEnd, monthLabel, monthStart, must, sb, today } from '../core';
 import { Icon } from '../icon';
 import { ChipOption, ChipSelect } from '../fields';
 
@@ -59,8 +59,10 @@ type Inv = Invoice & { due: number; running_due: number };
         <div class="day"><span>{{ g.label }}</span><span class="num">{{ g.sum | brl }}</span></div>
         <div class="list">
           @for (t of g.items; track t.id) {
-            <div class="item click" (click)="open(t)" tabindex="0" (keydown.enter)="open(t)">
-              <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
+            <div class="item click" [class.sel]="sel().has(t.id)" (click)="rowClick(t, $event)" (contextmenu)="$event.preventDefault(); toggleSel(t)"
+                 tabindex="0" (keydown.enter)="open(t)" (keydown.space)="$event.preventDefault(); toggleSel(t)">
+              <span class="cat-ico pickable" [class.picked]="sel().has(t.id)" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
+                    (click)="$event.stopPropagation(); toggleSel(t)" title="Selecionar"><span class="ms">{{ sel().has(t.id) ? 'check' : icon(t) }}</span></span>
               <div class="grow">
                 <div class="title">@if (!t.reviewed) {<i class="unrev" title="Para revisar"></i>}{{ t.description }}
                   @if (t.installments) { <span class="tag">{{ t.installment }}/{{ t.installments }}</span> }
@@ -91,6 +93,20 @@ type Inv = Invoice & { due: number; running_due: number };
         </div>
       }
     </section>
+
+    @if (sel().size) {
+      <div class="sel-bar" role="toolbar" aria-label="Ações nos selecionados">
+        <button class="btn ghost icon" (click)="sel.set(empty)" aria-label="Limpar seleção (Esc)" title="Limpar seleção (Esc)"><g-icon name="close" /></button>
+        <div class="grow"><b>{{ sel().size }} {{ sel().size > 1 ? 'selecionados' : 'selecionado' }}</b>
+          <span class="num" [class.neg]="selSum() < 0" [class.pos]="selSum() > 0">{{ selSum() | brl }}</span>
+          @if (sel().size < selectable().length) { <button class="link" (click)="selectAll()">todos ({{ selectable().length }})</button> }
+        </div>
+        <g-chip-select label="Categoria" [options]="bulkCats()" [value]="''" [clearable]="false" (valueChange)="bulkCat($event)" />
+        <button class="btn ghost" (click)="bulkPaid()" [title]="allPaid() ? 'Marcar como pendentes' : 'Marcar como pagos'">
+          <g-icon name="thumb_up" [size]="18" [fill]="!allPaid()" /><span class="hide-m">{{ allPaid() ? 'Pendentes' : 'Pagos' }}</span></button>
+        <button class="btn ghost danger" (click)="bulkDelete()" title="Excluir selecionados"><g-icon name="delete" [size]="18" /><span class="hide-m">Excluir</span></button>
+      </div>
+    }
   `,
 })
 export class Transactions {
@@ -160,6 +176,51 @@ export class Transactions {
     const result = this.filtered().filter((t) => !t.transfer_id).reduce((s, t) => s + t.amount, 0);
     return { now, end, result };
   });
+  /** seleção múltipla: soma na hora e ações em lote (como no Monarch/Copilot) */
+  readonly empty: ReadonlySet<string> = new Set();
+  sel = signal<ReadonlySet<string>>(this.empty);
+  selectable = computed(() => this.filtered().filter((t) => t.source !== 'invoice'));
+  selRows = computed(() => this.selectable().filter((t) => this.sel().has(t.id)));
+  selSum = computed(() => this.selRows().reduce((s, t) => s + t.amount, 0));
+  allPaid = computed(() => this.selRows().every((t) => t.paid));
+  bulkCats = computed(() => this.catOptions().filter((o) => o.value !== 'none'));
+  toggleSel(t: Tx) {
+    if (t.source === 'invoice') return;
+    const s = new Set(this.sel());
+    if (!s.delete(t.id)) s.add(t.id);
+    this.sel.set(s);
+  }
+  rowClick(t: Tx, e: MouseEvent) {
+    if (this.sel().size || e.ctrlKey || e.metaKey || e.shiftKey) this.toggleSel(t);
+    else this.open(t);
+  }
+  selectAll() { this.sel.set(new Set(this.selectable().map((t) => t.id))); }
+  @HostListener('document:keydown.escape') esc() { if (this.sel().size && !this.store.form()) this.sel.set(this.empty); }
+
+  async bulkCat(id: string) {
+    const cat = this.store.catById().get(id);
+    if (!cat) return;
+    // só onde a categoria faz sentido: despesa em saída, receita em entrada; transferência e pagamento de fatura ficam de fora
+    const ids = this.selRows().filter((t) => !t.transfer_id && !t.pays_card_id && (cat.kind === 'income') === t.amount > 0).map((t) => t.id);
+    if (!ids.length) return notify(`Nenhum selecionado aceita "${cat.name}"`, { tone: 'error' });
+    this.sel.set(this.empty);
+    await this.store.withUndo(`${ids.length} em ${cat.name}`, { column: 'id', value: ids },
+      () => must(sb.from('transactions').update({ category_id: id, reviewed: true }).in('id', ids)));
+  }
+  async bulkPaid() {
+    const paid = !this.allPaid(), ids = this.selRows().map((t) => t.id);
+    this.sel.set(this.empty);
+    await this.store.withUndo(`${ids.length} marcados como ${paid ? 'pagos' : 'pendentes'}`, { column: 'id', value: ids },
+      () => must(sb.from('transactions').update({ paid }).in('id', ids)));
+  }
+  async bulkDelete() {
+    let ids = this.selRows().map((t) => t.id);
+    const tids = [...new Set(this.selRows().map((t) => t.transfer_id).filter((x): x is string => !!x))];
+    if (tids.length) ids = [...new Set([...ids, ...(await must(sb.from('transactions').select('id').in('transfer_id', tids))).map((r) => r.id as string)])];
+    this.sel.set(this.empty);
+    await this.store.withUndo(`${ids.length} excluídos`, { column: 'id', value: ids }, () => must(sb.from('transactions').delete().in('id', ids)));
+  }
+
   setCash(on: boolean) { this.cash.set(on); localStorage.setItem('grana.cash', on ? '1' : '0'); }
   open(t: Tx) {
     if (t.source === 'invoice') this.router.navigate(['/cartoes'], { queryParams: { c: t.card_id } });
@@ -203,13 +264,14 @@ export class Transactions {
 
   async fetch(month: string, origin: string) {
     this.loading.set(true);
+    this.sel.set(this.empty);
     let q = sb.from('transactions').select('*').gte('date', month).lte('date', monthEnd(month));
     const [t, id] = origin.split(':');
     if (t === 'a') q = q.eq('account_id', id);
     if (t === 'c') q = q.eq('card_id', id);
     const end = monthEnd(month);
     const [rows, invs, pend] = await Promise.all([
-      must(q.order('date', { ascending: false }).order('created_at', { ascending: false })),
+      must(q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id')),
       must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
       must(sb.from('transactions').select('amount, account_id').eq('paid', false).not('account_id', 'is', null).lte('date', end)),
     ]);

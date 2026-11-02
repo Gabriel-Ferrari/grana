@@ -175,9 +175,10 @@ export class Store {
   }
 
   /** Alteração com "Desfazer": guarda as linhas antes, aplica, oferece restaurar. */
-  async withUndo(text: string, ids: { column: 'id' | 'transfer_id' | 'group_id'; value: string; fromDate?: string },
+  async withUndo(text: string, ids: { column: 'id' | 'transfer_id' | 'group_id'; value: string | string[]; fromDate?: string },
                  apply: () => PromiseLike<unknown>) {
-    let q = sb.from('transactions').select('*').eq(ids.column, ids.value);
+    let q = sb.from('transactions').select('*');
+    q = Array.isArray(ids.value) ? q.in(ids.column, ids.value) : q.eq(ids.column, ids.value);
     if (ids.fromDate) q = q.gte('date', ids.fromDate);
     const before = await must(q);
     await apply();
