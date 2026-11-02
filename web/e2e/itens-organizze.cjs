@@ -55,6 +55,33 @@ async function login(page) {
         ok('descer conta troca a ordem', after[0] === before[1] && after[1] === before[0], `${before.slice(0, 2).join(',')} → ${after.slice(0, 2).join(',')}`);
         await contasAj.nth(1).getByRole('button', { name: 'Subir' }).click(); await page.waitForTimeout(1500);
         ok('subir volta', (await contasAj.locator('.title').first().innerText()) === before[0]);
+        // arrastar pela alça: contas em Ajustes
+        const drag = async (from, to) => {
+            const h = from.locator('[data-drag-handle]'), hb = await h.boundingBox(), tb = await to.boundingBox();
+            await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+            await page.mouse.down();
+            for (let k = 1; k <= 8; k++) await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2 + (((tb.y > hb.y ? tb.y + tb.height * 0.75 : tb.y + tb.height * 0.25) - hb.y - hb.height / 2) * k) / 8);
+            await page.mouse.up();
+            await page.waitForTimeout(1500);
+        };
+        const t0 = await contasAj.locator('.title').allInnerTexts();
+        await drag(contasAj.first(), contasAj.nth(1));
+        const t1 = await contasAj.locator('.title').allInnerTexts();
+        ok('arrastar conta para baixo', t1[1] === t0[0], `${t0.slice(0, 2).join(',')} → ${t1.slice(0, 2).join(',')}`);
+        ok('arrastar não abre a edição', (await page.locator('.drawer').count()) === 0);
+        await drag(contasAj.nth(1), contasAj.first());
+        await page.waitForTimeout(500);
+        ok('arrastar de volta', (await contasAj.locator('.title').first().innerText()) === t0[0]);
+        // arrastar seções do Início
+        await page.goto(URL); await page.waitForTimeout(2500);
+        await page.getByRole('button', { name: /Personalizar/ }).click(); await page.waitForTimeout(500);
+        const rows = page.locator('.custom-row');
+        const n0 = await rows.locator('label').allInnerTexts();
+        await drag(rows.first(), rows.nth(2));
+        const n1 = await rows.locator('label').allInnerTexts();
+        ok('arrastar seção do Início', n1[2].trim() === n0[0].trim() || n1[1].trim() === n0[0].trim(), `${n0[0].trim()} → posição ${n1.findIndex((x) => x.trim() === n0[0].trim()) + 1}`);
+        await page.getByRole('button', { name: 'Restaurar padrão' }).click();
+        await page.getByRole('button', { name: 'Pronto' }).click();
         await page.close();
         // 12: deslizar no celular (eventos de toque)
         const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });

@@ -25,6 +25,7 @@ import { invoiceStatus } from '../cards/invoice';
 import { Icon } from '../../shared/ui/icon';
 import { BankLogo, CardArt, bankColor } from '../../shared/banks';
 import { ChipOption, ChipSelect } from '../../shared/ui/fields';
+import { DragList } from '../../shared/ui/drag-list';
 
 type CardId = 'ritmo' | 'onde' | 'equilibrio' | 'revisar' | 'apagar' | 'cartoes' | 'contas';
 interface HomeCard {
@@ -55,7 +56,7 @@ function loadLayout(): HomeCard[] {
 }
 
 @Component({
-    imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo, CardArt, ChipSelect, Meter],
+    imports: [BrlPipe, DmyPipe, RouterLink, Icon, Pace, RankBars, BankLogo, CardArt, ChipSelect, Meter, DragList],
     template: `
         <div class="page-title reveal">
             <div>
@@ -487,10 +488,11 @@ function loadLayout(): HomeCard[] {
                     </button>
                 </header>
                 <div class="body">
-                    <p class="muted" style="margin:0">Escolha o que aparece e em que ordem. O saldo fica sempre no topo.</p>
-                    <div class="list">
+                    <p class="muted" style="margin:0">Arraste pela alça (⠿) ou use as setas. O saldo fica sempre no topo.</p>
+                    <div class="list" gDragList (reorder)="dropCard($event)">
                         @for (c of layout(); track c.id; let i = $index; let last = $last) {
-                            <div class="item custom-row">
+                            <div class="item custom-row" data-drag-item>
+                                <span data-drag-handle aria-hidden="true"><g-icon name="drag_indicator" [size]="20" /></span>
                                 <label class="check grow"
                                     ><input type="checkbox" [checked]="!c.hidden" (change)="toggleCard(c.id)" />{{ cardName(c.id) }}</label
                                 >
@@ -632,6 +634,12 @@ export class Home {
     }
     toggleCard(id: CardId) {
         this.saveLayout(this.layout().map((c) => (c.id === id ? { ...c, hidden: !c.hidden } : c)));
+    }
+    dropCard(e: { from: number; to: number }) {
+        const l = [...this.layout()];
+        const [x] = l.splice(e.from, 1);
+        l.splice(e.to, 0, x);
+        this.saveLayout(l);
     }
     moveCard(i: number, d: number) {
         const l = [...this.layout()];
