@@ -398,6 +398,21 @@ function loadLayout(): HomeCard[] {
                                         <h2>Cartões</h2>
                                         <a routerLink="/cartoes">Faturas <g-icon name="chevron_right" [size]="18" /></a>
                                     </div>
+                                    <!-- soma das faturas que vencem neste mês, todos os cartões -->
+                                    <div class="cards-total">
+                                        <div>
+                                            <span>Faturas de {{ monthName() }}</span
+                                            ><b>{{ cardsMonth().total | brl }}</b>
+                                        </div>
+                                        @if (cardsMonth().due !== cardsMonth().total) {
+                                            <div>
+                                                <span>{{ cardsMonth().due ? 'Falta pagar' : 'Situação' }}</span
+                                                ><b [class.neg]="cardsMonth().due > 0" [class.pos]="!cardsMonth().due">{{
+                                                    cardsMonth().due ? (cardsMonth().due | brl) : 'tudo pago'
+                                                }}</b>
+                                            </div>
+                                        }
+                                    </div>
                                     <div class="list">
                                         @for (c of cards(); track c.id) {
                                             <a class="item click" routerLink="/cartoes" [queryParams]="{ c: c.id }" style="flex-wrap:wrap">
@@ -635,6 +650,9 @@ export class Home {
         return { cur, avg, days, forecast, now, ref, dir, verdict };
     });
     abs = Math.abs;
+    /** total das faturas do mês (todos os cartões) e quanto ainda falta pagar */
+    cardsMonth = signal({ total: 0, due: 0 });
+    monthName = computed(() => new Date(this.m + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long' }));
     /** previsto da conta + faturas em aberto dos cartões que ela paga (Organizze: "conta de pagamento" do cartão) */
     accForecast(a: { id: string; forecast: number }) {
         const end = monthEnd(this.hoje);
@@ -719,7 +737,7 @@ export class Home {
                 (x) => x.error || ['LOGIN_ERROR', 'OUTDATED', 'WAITING_USER_INPUT'].includes(x.status ?? ''),
             ),
         );
-        const [mo, d, c, b, i, l] = await Promise.all([
+        const [mo, d, c, b, i, l, mi] = await Promise.all([
             must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
             must(sb.rpc('report_by_day', { p_from: addMonths(this.m, -3), p_to: this.hoje })),
             must(sb.rpc('report_by_category', { p_from: this.m, p_to: monthEnd(this.m) })),
@@ -754,6 +772,8 @@ export class Home {
                     .is('transfer_id', null)
                     .lt('date', this.hoje),
             ),
+            // faturas que vencem neste mês (pagas ou não): total do mês no card de cartões
+            must(sb.from('invoices').select('due, paid').gte('invoice_date', this.m).lte('invoice_date', monthEnd(this.m))),
         ]);
         const lr = l as { amount: number }[];
         this.late.set({ n: lr.length, sum: lr.reduce((s, r) => s + r.amount, 0) });
@@ -763,6 +783,11 @@ export class Home {
         this.cats.set(c as { category_id: string | null; expense: number }[]);
         this.bills.set(b as Tx[]);
         this.invoices.set(i as (Invoice & { due: number })[]);
+        const mrows = mi as { due: number; paid: number }[];
+        this.cardsMonth.set({
+            total: mrows.reduce((s, r) => s + Math.max(0, r.due) + Math.max(0, r.paid), 0),
+            due: mrows.reduce((s, r) => s + Math.max(0, r.due), 0),
+        });
         this.loading.set(false);
     }
 

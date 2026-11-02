@@ -3689,3 +3689,28 @@ body:has(.sel-bar) .toast {
         display: none;
     }
 }
+
+/* início: total das faturas do mês no card de cartões */
+.cards-total {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    margin: -0.3rem 0 0.6rem;
+    padding: 0.65rem 0.85rem;
+    border-radius: 14px;
+    background: color-mix(in oklch, var(--out) 8%, var(--sunk));
+}
+.cards-total span {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 650;
+    color: var(--muted);
+}
+.cards-total b {
+    font-size: 1.1rem;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.cards-total > div:last-child:not(:first-child) {
+    text-align: right;
+}
