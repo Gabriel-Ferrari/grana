@@ -640,3 +640,4 @@ body:has(.sel-bar) .toast { margin-bottom: 6.6rem; }
 .inv-break b { font-variant-numeric: tabular-nums; font-size: .98rem; }
 @media (max-width: 560px) { .inv-break { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .pay-row .title { font-weight: 600; }
+#a-pagar { scroll-margin-top: 5.5rem; }

@@ -27,6 +27,12 @@ import { ChipOption, ChipSelect } from '../fields';
         <span><b>{{ c.connector || 'Banco' }} precisa de atenção</b> — {{ c.error || 'a autorização venceu ou foi negada. Toque para reconectar.' }}</span><g-icon name="chevron_right" /></a>
     }
 
+    @if (late().n || lateInvs().length) {
+      <a class="banner warn reveal" href="#a-pagar" (click)="$event.preventDefault(); toBills()"><g-icon name="schedule" [fill]="true" />
+        <span><b>@if (late().n) {{{ late().n }} {{ late().n > 1 ? 'lançamentos atrasados' : 'lançamento atrasado' }}}@if (late().n && lateInvs().length) { e }@if (lateInvs().length) {{{ lateInvs().length }} {{ lateInvs().length > 1 ? 'faturas vencidas' : 'fatura vencida' }}}</b>
+          — {{ late().sum + lateInvSum() | brl }}. Toque para ver e marcar como pago.</span><g-icon name="chevron_right" /></a>
+    }
+
     <div class="grid-home" [class.loading]="loading()">
       <div class="stack reveal">
         <section class="panel hero">
@@ -103,7 +109,7 @@ import { ChipOption, ChipSelect } from '../fields';
             </div>
           </section>
         }
-        <section class="panel">
+        <section class="panel" id="a-pagar">
           <div class="panel-head"><h2>A pagar</h2><a routerLink="/lancamentos">Ver tudo <g-icon name="chevron_right" [size]="18" /></a></div>
           <div class="list">
             @for (t of bills(); track t.id) {
@@ -178,6 +184,10 @@ export class Home {
   daily = signal<{ day: string; expense: number }[]>([]);
   cats = signal<{ category_id: string | null; expense: number }[]>([]);
   bills = signal<Tx[]>([]);
+  late = signal({ n: 0, sum: 0 });
+  lateInvs = computed(() => this.invoices().filter((i) => i.invoice_date < this.hoje));
+  lateInvSum = computed(() => -this.lateInvs().reduce((s, i) => s + i.due, 0));
+  toBills() { document.getElementById('a-pagar')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
   review = signal<Tx[]>([]);
   connIssues = signal<{ id: string; connector: string | null; error: string | null }[]>([]);
   catOptions = (t: Tx): ChipOption[] => this.store.categories()
@@ -228,14 +238,18 @@ export class Home {
     this.review.set(rv as Tx[]);
     this.connIssues.set((ci as { id: string; connector: string | null; status: string | null; error: string | null }[])
       .filter((x) => x.error || ['LOGIN_ERROR', 'OUTDATED', 'WAITING_USER_INPUT'].includes(x.status ?? '')));
-    const [mo, d, c, b, i] = await Promise.all([
+    const [mo, d, c, b, i, l] = await Promise.all([
       must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
       must(sb.rpc('report_by_day', { p_from: addMonths(this.m, -3), p_to: this.hoje })),
       must(sb.rpc('report_by_category', { p_from: this.m, p_to: monthEnd(this.m) })),
       must(sb.from('transactions').select('*').eq('paid', false).not('account_id', 'is', null).lt('amount', 0)
         .lte('date', addMonths(this.hoje, 1)).order('date').limit(6)),
       must(sb.from('invoices').select('*').gt('due', 0).gte('invoice_date', addMonths(this.hoje, -1)).lte('invoice_date', addMonths(this.hoje, 2)).order('invoice_date').limit(6)),
+      // atrasados (como o banner do Organizze): pendentes em conta com data passada
+      must(sb.from('transactions').select('amount').eq('paid', false).not('account_id', 'is', null).is('transfer_id', null).lt('date', this.hoje)),
     ]);
+    const lr = l as { amount: number }[];
+    this.late.set({ n: lr.length, sum: lr.reduce((s, r) => s + r.amount, 0) });
     const row = (mo as { income: number; expense: number }[])[0];
     this.month.set({ income: row?.income ?? 0, expense: row?.expense ?? 0 });
     this.daily.set(d as { day: string; expense: number }[]);
