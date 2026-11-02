@@ -7,7 +7,7 @@ import { Icon } from '../icon';
 import { BankLogo, networkLogo } from '../banks';
 import { invoiceStatus } from '../invoice';
 
-type Inv = Invoice & { due: number };
+type Inv = Invoice & { due: number; running_due: number };
 
 @Component({
   imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, Icon, Meter, BankLogo],
@@ -62,6 +62,22 @@ type Inv = Invoice & { due: number };
               @if (i.due !== i.total) { <span class="muted small">a pagar {{ i.due | brl }}</span> }</div>
           </div>
 
+          <div class="inv-break">
+            <div><span>Saldo anterior</span><b [class.pos]="carry(i) < 0">{{ carry(i) < 0 ? 'crédito ' : '' }}{{ 0 - carry(i) | brl }}</b></div>
+            <div><span>Gastos do mês</span><b>{{ 0 - i.total | brl }}</b></div>
+            <div><span>Pagamentos</span><b [class.pos]="i.paid > 0">{{ i.paid | brl }}</b></div>
+            <div><span>{{ i.is_paid ? 'Fatura' : 'Falta pagar' }}</span><b [class.neg]="i.due > 0">{{ i.is_paid ? 'paga' : (0 - i.due | brl) }}</b></div>
+          </div>
+
+          @for (p of payments(); track p.id) {
+            <div class="item click pay-row" (click)="store.open(p)" tabindex="0" (keydown.enter)="store.open(p)">
+              <span class="cat-ico" style="--cc: var(--in)"><span class="ms">check_circle</span></span>
+              <div class="grow"><div class="title">Pagamento em {{ p.date | dmy }}</div>
+                <div class="sub">{{ store.originName().get(p.account_id ?? '') }}@if (!p.paid) { · <span class="neg">agendado</span>}</div></div>
+              <span class="amt">{{ p.amount | brl }}</span>
+            </div>
+          }
+
           @if (i.due > 0) {
             <form class="row wrap" (ngSubmit)="pay(i)" style="padding:.8rem;border-radius:14px;background:var(--sunk);margin-bottom:.6rem">
               <label style="min-width:150px">Pagar com <select name="acc" [(ngModel)]="payAcc">
@@ -100,6 +116,9 @@ export class Cards {
   inv = signal('');
   sel = computed(() => this.invoices().find((i) => i.invoice_date === (this.inv() || this.card()?.current_invoice_date)) ?? this.invoices()[0]);
   txs = signal<Tx[]>([]);
+  payments = signal<Tx[]>([]);
+  /** dívida (+) ou crédito (−) que veio das faturas anteriores: running_due = anterior + gastos − pagamentos */
+  carry = (i: Inv) => i.running_due - i.total + i.paid;
   loadingTx = signal(false);
   payAcc = '';
   payValue: number | null = null;
@@ -132,9 +151,14 @@ export class Cards {
   }
 
   async fetchTxs(i: Inv | undefined) {
-    if (!i) return this.txs.set([]);
+    if (!i) { this.payments.set([]); return this.txs.set([]); }
     this.loadingTx.set(true);
-    this.txs.set(await must(sb.from('transactions').select('*').eq('card_id', i.card_id).eq('invoice_date', i.invoice_date).order('date', { ascending: false })) as Tx[]);
+    const [txs, pays] = await Promise.all([
+      must(sb.from('transactions').select('*').eq('card_id', i.card_id).eq('invoice_date', i.invoice_date).order('date', { ascending: false })),
+      must(sb.from('transactions').select('*').eq('pays_card_id', i.card_id).eq('invoice_date', i.invoice_date).order('date')),
+    ]);
+    this.txs.set(txs as Tx[]);
+    this.payments.set(pays as Tx[]);
     this.loadingTx.set(false);
   }
 
