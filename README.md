@@ -13,18 +13,38 @@ Angular (Cloudflare Workers) ── supabase-js + login Google ─────�
 |---|---|
 | `supabase/migrations` | schema, regras de fatura, views de saldo/fatura/relatório, RLS, categorias padrão |
 | `supabase/functions/ingest` | recebe notificações, parser (`parser.ts`) |
-| `web/` | app Angular: visão geral, lançamentos, cartões/faturas, relatórios, limites, notificações, ajustes |
+| `supabase/functions/pluggy` | Open Finance (MeuPluggy): token do widget e sincronização (`map.ts`) |
+| `web/` | app Angular (estrutura abaixo) |
 | `android/` | app Android "grana": app web em tela cheia (TWA/Chrome) + coletor de notificações (Kotlin) |
 | `scripts/import-organizze.mjs` | migra seus dados do Organizze (API v2), idempotente |
 | `docs/engenharia-reversa.md` | o que foi descoberto sobre o Organizze |
 
+### `web/src/app` — por domínio
+```
+core/            cliente Supabase, modelos, formatação (brl, datas), estado de UI (tema, toast), Store
+shared/ui/       componentes sem regra de negócio: ícones, campos (valor, teclado, data, seletor), gráficos
+shared/banks.ts  catálogo de bancos/bandeiras e logo
+features/
+  home/          visão geral (ritmo, para onde foi, a pagar, 50/30/20)
+  transactions/  lista, filtros, períodos, seleção em lote, formulário (tx-form)
+  cards/         cartões e faturas (invoice.ts: situação da fatura)
+  reports/       relatórios, balanço, tags, recorrentes (recurring.ts)
+  budgets/       limites de gastos
+  notifications/ notificações coletadas no celular
+  settings/      contas, cartões, categorias, tags, segurança
+  banks/         Open Finance (conectar bancos)
+```
+Regras: `features/*` só importam de `core` e `shared`; `shared` não importa de `features`.
+Código: 4 espaços, Prettier + ESLint (angular-eslint, acessibilidade nos templates):
+`cd web && npm run lint && npm run format:check` (`npm run format` corrige).
+
 ## Desenvolvimento local
 ```bash
-npx supabase start -x studio,imgproxy,vector,logflare,realtime,storage-api,postgres-meta,supavisor,mailpit
+npx supabase start -x studio,imgproxy,vector,logflare,realtime,postgres-meta,supavisor,mailpit   # storage-api fica: anexos
 npx supabase functions serve            # outro terminal
 cd web && npm i && npx ng serve          # http://localhost:4200 (login dev por e-mail/senha)
 ```
-Testes: `node --test supabase/functions/ingest/parser.test.ts supabase/functions/pluggy/map.test.ts web/src/app/*.spec.ts` e
+Testes: `node --test supabase/functions/ingest/parser.test.ts supabase/functions/pluggy/map.test.ts web/src/app/features/*/*.spec.ts` e
 `docker exec -i supabase_db_grana psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/check.sql`.
 
 Usuário dev local: crie com

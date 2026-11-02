@@ -1,38 +1,46 @@
 {
-  "name": "web",
-  "version": "0.0.0",
-  "scripts": {
-    "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test",
-    "deploy": "npm run build && wrangler deploy",
-    "preview": "npm run build && wrangler dev"
-  },
-  "private": true,
-  "packageManager": "npm@11.17.0",
-  "dependencies": {
-    "@angular/common": "^22.1.0",
-    "@angular/compiler": "^22.1.0",
-    "@angular/core": "^22.1.0",
-    "@angular/forms": "^22.1.0",
-    "@angular/platform-browser": "^22.1.0",
-    "@angular/router": "^22.1.0",
-    "@fontsource-variable/fraunces": "^5.3.0",
-    "@fontsource-variable/manrope": "^5.3.0",
-    "@supabase/supabase-js": "^2.118.0",
-    "chart.js": "^4.6.1",
-    "pluggy-connect-sdk": "^2.14.2",
-    "rxjs": "~7.8.0",
-    "tslib": "^2.3.0"
-  },
-  "devDependencies": {
-    "@angular/build": "^22.1.5",
-    "@angular/cli": "^22.1.5",
-    "@angular/compiler-cli": "^22.1.0",
-    "prettier": "^3.8.1",
-    "typescript": "~6.0.2",
-    "wrangler": "^4.156.1"
-  }
+    "name": "web",
+    "version": "0.0.0",
+    "scripts": {
+        "ng": "ng",
+        "start": "ng serve",
+        "build": "ng build",
+        "watch": "ng build --watch --configuration development",
+        "test": "ng test",
+        "deploy": "npm run build && wrangler deploy",
+        "preview": "npm run build && wrangler dev",
+        "lint": "eslint src",
+        "format": "prettier --write \"src/**/*.{ts,html,css}\" \"../supabase/functions/**/*.ts\" \"../scripts/**/*.mjs\"",
+        "format:check": "prettier --check \"src/**/*.{ts,html,css}\" \"../supabase/functions/**/*.ts\" \"../scripts/**/*.mjs\""
+    },
+    "private": true,
+    "packageManager": "npm@11.17.0",
+    "dependencies": {
+        "@angular/common": "^22.1.0",
+        "@angular/compiler": "^22.1.0",
+        "@angular/core": "^22.1.0",
+        "@angular/forms": "^22.1.0",
+        "@angular/platform-browser": "^22.1.0",
+        "@angular/router": "^22.1.0",
+        "@fontsource-variable/fraunces": "^5.3.0",
+        "@fontsource-variable/manrope": "^5.3.0",
+        "@supabase/supabase-js": "^2.118.0",
+        "chart.js": "^4.6.1",
+        "pluggy-connect-sdk": "^2.14.2",
+        "rxjs": "~7.8.0",
+        "tslib": "^2.3.0"
+    },
+    "devDependencies": {
+        "@angular/build": "^22.1.5",
+        "@angular/cli": "^22.1.5",
+        "@angular/compiler-cli": "^22.1.0",
+        "@eslint/js": "^10.0.1",
+        "angular-eslint": "^22.6.0",
+        "eslint": "^10.14.0",
+        "eslint-config-prettier": "^10.1.8",
+        "prettier": "^3.8.1",
+        "typescript": "~6.0.2",
+        "typescript-eslint": "^8.72.1",
+        "wrangler": "^4.156.1"
+    }
 }

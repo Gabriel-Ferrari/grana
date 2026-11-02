@@ -1,12 +1,12 @@
 import { Routes } from '@angular/router';
 
 export const routes: Routes = [
-  { path: '', loadComponent: () => import('./pages/home').then((m) => m.Home) },
-  { path: 'lancamentos', loadComponent: () => import('./pages/transactions').then((m) => m.Transactions) },
-  { path: 'cartoes', loadComponent: () => import('./pages/cards').then((m) => m.Cards) },
-  { path: 'relatorios', loadComponent: () => import('./pages/reports').then((m) => m.Reports) },
-  { path: 'limites', loadComponent: () => import('./pages/budgets').then((m) => m.Budgets) },
-  { path: 'notificacoes', loadComponent: () => import('./pages/inbox').then((m) => m.Inbox) },
-  { path: 'ajustes', loadComponent: () => import('./pages/settings').then((m) => m.Settings) },
-  { path: '**', redirectTo: '' },
+    { path: '', loadComponent: () => import('./features/home/home.page').then((m) => m.Home) },
+    { path: 'lancamentos', loadComponent: () => import('./features/transactions/transactions.page').then((m) => m.Transactions) },
+    { path: 'cartoes', loadComponent: () => import('./features/cards/cards.page').then((m) => m.Cards) },
+    { path: 'relatorios', loadComponent: () => import('./features/reports/reports.page').then((m) => m.Reports) },
+    { path: 'limites', loadComponent: () => import('./features/budgets/budgets.page').then((m) => m.Budgets) },
+    { path: 'notificacoes', loadComponent: () => import('./features/notifications/inbox.page').then((m) => m.Inbox) },
+    { path: 'ajustes', loadComponent: () => import('./features/settings/settings.page').then((m) => m.Settings) },
+    { path: '**', redirectTo: '' },
 ];
