@@ -41,13 +41,22 @@ import { BankLogo } from '../banks';
           <div class="panel-head">
             <div>
               <h2>Ritmo de gastos</h2>
-              <p class="muted small" style="margin:.15rem 0 0">{{ paceText() }}</p>
+              <p class="muted small" style="margin:.15rem 0 0">Gasto acumulado no mês, comparado à média dos 3 meses anteriores</p>
             </div>
           </div>
-          <g-pace [current]="pace().cur" [previous]="pace().prev" [days]="pace().days" />
+          <div class="pace-stats">
+            <div><span>Gasto até hoje</span><b>{{ pace().cur.at(-1) ?? 0 | brl }}</b></div>
+            <div><span>vs. média no dia {{ pace().cur.length }}</span>
+              <b class="delta" [attr.data-dir]="!(pace().cur.at(-1)) ? 'eq' : pace().diff > 0 ? 'up' : pace().diff < 0 ? 'down' : 'eq'">
+                <g-icon [name]="!(pace().cur.at(-1)) ? 'trending_flat' : pace().diff > 0 ? 'trending_up' : pace().diff < 0 ? 'trending_down' : 'trending_flat'" [size]="20" />
+                {{ !(pace().cur.at(-1)) ? 'nada gasto ainda' : pace().diff === 0 ? 'igual' : (pace().diff > 0 ? '+' : '−') + Math.abs(pace().diff) + '%' }}
+              </b></div>
+            <div><span>Previsão do mês</span><b>{{ pace().forecast | brl }}</b></div>
+          </div>
+          <g-pace [current]="pace().cur" [average]="pace().avg" [days]="pace().days" />
           <details class="table-view"><summary>Ver em tabela</summary>
-            <table><tr><th>Dia</th><th>Este mês</th><th>Mês passado</th></tr>
-              @for (d of tableDays(); track d) { <tr><td>{{ d }}</td><td>{{ pace().cur[d - 1] ?? null | brl }}</td><td>{{ pace().prev[d - 1] ?? null | brl }}</td></tr> }
+            <table><tr><th>Dia</th><th>Este mês</th><th>Média 3 meses</th></tr>
+              @for (d of tableDays(); track d) { <tr><td>{{ d }}</td><td>{{ pace().cur[d - 1] ?? null | brl }}</td><td>{{ pace().avg[d - 1] | brl }}</td></tr> }
             </table>
           </details>
         </section>
@@ -145,8 +154,8 @@ export class Home {
   icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
   bank = (name: string, c: string | null) => bankColor(name, c) ?? 'var(--brand)';
 
+  Math = Math;
   pace = computed(() => {
-    const prevStart = addMonths(this.m, -1);
     const days = +monthEnd(this.m).slice(8);
     const todayN = +this.hoje.slice(8);
     const cum = (start: string, n: number) => {
@@ -154,18 +163,16 @@ export class Home {
       let acc = 0;
       return Array.from({ length: n }, (_, i) => (acc += by.get(i + 1) ?? 0));
     };
-    return { cur: cum(this.m, todayN), prev: cum(prevStart, +monthEnd(prevStart).slice(8)), days };
+    const cur = cum(this.m, todayN);
+    // média acumulada dos 3 meses anteriores, alinhada por dia (meses curtos repetem o último valor)
+    const prev = [1, 2, 3].map((k) => { const pm = addMonths(this.m, -k); return cum(pm, +monthEnd(pm).slice(8)); });
+    const avg = Array.from({ length: days }, (_, i) => Math.round(prev.reduce((s, p) => s + (p[Math.min(i, p.length - 1)] ?? 0), 0) / 3));
+    const now = cur.at(-1) ?? 0, ref = avg[todayN - 1] ?? 0;
+    const forecast = now + Math.max(0, (avg[days - 1] ?? 0) - ref);
+    const diff = ref ? Math.round(((now - ref) / ref) * 100) : 0;
+    return { cur, avg, days, forecast, diff };
   });
   tableDays = computed(() => Array.from({ length: this.pace().cur.length }, (_, i) => i + 1));
-  paceText = computed(() => {
-    const { cur, prev } = this.pace();
-    const now = cur.at(-1) ?? 0, then = prev[cur.length - 1] ?? 0;
-    if (hidden()) return 'Valores ocultos';
-    if (!then) return 'Gasto acumulado do mês, dia a dia.';
-    if (!now) return `Nada gasto até hoje. No mês passado, até o dia ${cur.length}: ${brl(then)}.`;
-    const pct = Math.round(((now - then) / then) * 100);
-    return pct === 0 ? 'Igual ao mês passado até hoje.' : `${Math.abs(pct)}% ${pct > 0 ? 'acima' : 'abaixo'} do mês passado até hoje.`;
-  });
   byCategory = computed<RankItem[]>(() => this.cats().filter((c) => c.expense > 0).map((c) => {
     const cat = this.store.catById().get(c.category_id ?? '');
     return { id: c.category_id ?? '', name: cat?.name ?? 'Sem categoria', value: c.expense, color: cat?.color, icon: catIcon(cat) };
@@ -176,10 +183,9 @@ export class Home {
   }
 
   async fetch() {
-    const prevStart = addMonths(this.m, -1);
     const [mo, d, c, b, i] = await Promise.all([
       must(sb.rpc('report_by_month', { p_from: this.m, p_to: monthEnd(this.m) })),
-      must(sb.rpc('report_by_day', { p_from: prevStart, p_to: this.hoje })),
+      must(sb.rpc('report_by_day', { p_from: addMonths(this.m, -3), p_to: this.hoje })),
       must(sb.rpc('report_by_category', { p_from: this.m, p_to: monthEnd(this.m) })),
       must(sb.from('transactions').select('*').eq('paid', false).not('account_id', 'is', null).lt('amount', 0)
         .lte('date', addMonths(this.hoje, 1)).order('date').limit(6)),

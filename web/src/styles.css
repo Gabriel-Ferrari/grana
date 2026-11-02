@@ -390,3 +390,16 @@ kbd { font: 650 .72rem var(--font); padding: .1rem .35rem; border-radius: 5px; b
 .chip.net { cursor: pointer; padding: .35rem .7rem .35rem .4rem; background: var(--surface); }
 .chip.net img { width: 20px; height: 20px; border-radius: 5px; }
 .chip.net.on { border-color: var(--brand); background: color-mix(in oklch, var(--brand) 12%, var(--surface)); color: var(--ink); }
+
+/* gráficos Chart.js */
+.chart-box { position: relative; width: 100%; }
+.key.proj { background: repeating-linear-gradient(90deg, var(--out) 0 5px, transparent 5px 9px); opacity: .7; }
+.key.avg { background: repeating-linear-gradient(90deg, var(--muted) 0 2px, transparent 2px 5px); }
+.key.net { background: var(--ink); height: 3px; }
+.pace-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: .2rem 0 1.1rem; padding: 1rem 1.1rem; border-radius: 16px; background: var(--sunk); }
+.pace-stats span { display: block; font-size: .76rem; font-weight: 650; color: var(--muted); margin-bottom: .2rem; }
+.pace-stats b { font-size: clamp(1.05rem, 2.4vw, 1.35rem); font-weight: 750; letter-spacing: -.02em; display: flex; align-items: center; gap: .25rem; }
+.delta[data-dir='up'] { color: var(--danger); }
+.delta[data-dir='down'] { color: var(--in-text); }
+@media (max-width: 520px) { .pace-stats { grid-template-columns: 1fr 1fr; } .pace-stats > :last-child { grid-column: 1 / -1; } }
+.delta[data-dir='eq'] { color: var(--ink-2); font-size: 1rem !important; }

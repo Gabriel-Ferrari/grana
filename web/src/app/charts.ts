@@ -1,28 +1,89 @@
-// Gráficos em SVG puro, seguindo a skill dataviz: marcas finas, ponta arredondada 4px e base reta,
-// grade em linha fina sólida, tooltip em hover E foco, texto sempre na cor de texto (nunca na cor da série),
-// tabela equivalente para leitura sem gráfico. Paleta validada (validate_palette.js) em styles.css: --in / --out.
-import { Component, ElementRef, afterNextRender, computed, inject, input, output, signal } from '@angular/core';
+// Gráficos: ranking e medidor em HTML/CSS; ritmo de gastos e entradas×saídas com Chart.js (canvas, ~50 kB gz).
+// Regras da skill dataviz: um eixo só, legenda sempre, texto na cor de texto, tooltip em hover e toque,
+// tabela equivalente na página. Paleta validada (validate_palette.js) em styles.css: --in / --out.
+import { Component, DestroyRef, ElementRef, Signal, afterNextRender, computed, effect, inject, input, output, viewChild } from '@angular/core';
+import {
+  BarController, BarElement, CategoryScale, Chart, ChartConfiguration, Filler, LineController, LineElement,
+  LinearScale, Plugin, PointElement, ScriptableContext, Tooltip, TooltipItem,
+} from 'chart.js';
 import { BrlPipe, brl, hidden } from './core';
 import { Icon } from './icon';
 
-/** Largura real do host (os gráficos desenham em px, sem distorcer texto). */
-function hostWidth() {
-  const el = inject(ElementRef).nativeElement as HTMLElement;
-  const w = signal(600);
-  afterNextRender(() => {
-    const ro = new ResizeObserver(([e]) => w.set(Math.max(240, Math.round(e.contentRect.width))));
-    ro.observe(el);
-  });
-  return w;
+Chart.register(LineController, LineElement, PointElement, BarController, BarElement, CategoryScale, LinearScale, Filler, Tooltip);
+
+/** Qualquer cor CSS (oklch, light-dark, nomes…) vira rgb(): pinta 1 pixel num canvas e lê de volta. */
+const probe = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+function toRgb(color: string): string {
+  probe.clearRect(0, 0, 1, 1);
+  probe.fillStyle = color;
+  probe.fillRect(0, 0, 1, 1);
+  const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+/** Cor resolvida de uma variável CSS, já em rgb() (o getComputedStyle pode devolver oklch()). */
+function css(v: string): string {
+  const el = document.createElement('i');
+  el.style.color = `var(${v})`;
+  document.body.append(el);
+  const c = getComputedStyle(el).color;
+  el.remove();
+  return toRgb(c);
+}
+/** Mesma cor com transparência (entrada sempre rgb(), vinda de css()). */
+function alpha(rgb: string, a: number): string {
+  const [r, g, b] = (rgb.match(/\d+/g) ?? ['0', '0', '0']).map(Number);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
+}
+const money = (c: number, compact = true) => (hidden() ? '•••' : brl(c, compact));
+
+/** Tema dos gráficos, relido quando o sistema troca claro/escuro. */
+function theme() {
+  return { ink: css('--ink'), ink2: css('--ink-2'), muted: css('--muted'), line: css('--line'), surface: css('--surface'), in: css('--in'), out: css('--out'), font: getComputedStyle(document.body).fontFamily };
 }
 
-function niceMax(v: number) {
-  if (v <= 0) return 100;
-  const p = 10 ** Math.floor(Math.log10(v));
-  const n = v / p;
-  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 2.5 ? 2.5 : n <= 5 ? 5 : 10) * p;
+/** Linha vertical que acompanha o ponteiro (o leitor mira na data, não numa linha de 2px). */
+const crosshair: Plugin = {
+  id: 'crosshair',
+  afterDatasetsDraw(chart) {
+    const active = chart.tooltip?.getActiveElements();
+    if (!active?.length) return;
+    const { ctx, chartArea } = chart;
+    const x = active[0].element.x;
+    ctx.save();
+    ctx.strokeStyle = (chart.options.plugins as { crosshair?: { color: string } }).crosshair?.color ?? '#888';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, chartArea.top); ctx.lineTo(x, chartArea.bottom); ctx.stroke();
+    ctx.restore();
+  },
+};
+
+/** Cria/atualiza um Chart.js preso ao <canvas> do componente; recria ao trocar o tema do sistema. */
+function useChart(canvas: Signal<ElementRef<HTMLCanvasElement>>, build: (t: ReturnType<typeof theme>) => ChartConfiguration) {
+  let chart: Chart | undefined;
+  const render = () => {
+    chart?.destroy();
+    chart = new Chart(canvas().nativeElement, build(theme()));
+  };
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  afterNextRender(() => { render(); mq.addEventListener('change', render); });
+  inject(DestroyRef).onDestroy(() => { mq.removeEventListener('change', render); chart?.destroy(); });
+  return {
+    /** chamar dentro de effect() depois de ler os inputs: redesenha com os dados novos */
+    update: () => {
+      if (!chart) return; // o primeiro desenho acontece no afterNextRender
+      const cfg = build(theme());
+      chart.data = cfg.data;
+      chart.options = cfg.options!;
+      chart.update();
+    },
+  };
 }
-const money = (c: number) => (hidden() ? '•••' : brl(c, true));
+
+const tooltipBase = (t: ReturnType<typeof theme>) => ({
+  backgroundColor: t.ink, titleColor: t.surface, bodyColor: t.surface, padding: 12, cornerRadius: 12, boxPadding: 6,
+  titleFont: { family: t.font, size: 12, weight: 600 as const }, bodyFont: { family: t.font, size: 13, weight: 700 as const },
+  usePointStyle: true, displayColors: true,
+});
 
 // ───────────────────────── Barras ranqueadas (para onde foi o dinheiro) ─────────────────────────
 export interface RankItem { id: string; name: string; value: number; color?: string; icon?: string }
@@ -62,136 +123,156 @@ export class RankBars {
   });
 }
 
-// ───────────────────────── Ritmo de gastos: acumulado do mês vs mês anterior ─────────────────────────
+// ───────────────────────── Ritmo de gastos: acumulado do mês, previsão e média de 3 meses ─────────────────────────
 @Component({
   selector: 'g-pace',
   template: `
-    @if (w(); as W) {
-      <svg [attr.width]="W" [attr.height]="H + 26" class="pace" (pointermove)="move($event)" (pointerleave)="hover.set(null)"
-           role="img" [attr.aria-label]="label()">
-        @for (t of ticks(); track t) {
-          <line class="grid" [attr.x1]="L" [attr.x2]="W - R" [attr.y1]="y(t)" [attr.y2]="y(t)" />
-          <text class="tick" [attr.x]="L - 8" [attr.y]="y(t) + 4" text-anchor="end">{{ fmt(t) }}</text>
-        }
-        @for (d of xTicks(); track d) {
-          <text class="tick" [attr.x]="x(d)" [attr.y]="H + 18" text-anchor="middle">{{ d }}</text>
-        }
-        <path class="prev" [attr.d]="path(previous())" />
-        <path class="area" [attr.d]="area(current())" />
-        <path class="cur draw" [attr.d]="path(current())" pathLength="1" />
-        @if (current().length; as n) {
-          <circle class="end" [attr.cx]="x(n)" [attr.cy]="y(current()[n - 1])" r="4.5" />
-          <text class="endlabel" [attr.x]="x(n) + 9" [attr.y]="y(current()[n - 1]) + 4">{{ fmt(current()[n - 1]) }}</text>
-        }
-        @if (hover(); as d) {
-          <line class="cross" [attr.x1]="x(d)" [attr.x2]="x(d)" [attr.y1]="T" [attr.y2]="H" />
-          @if (previous()[d - 1] !== undefined) { <circle class="dot-prev" [attr.cx]="x(d)" [attr.cy]="y(previous()[d - 1])" r="4" /> }
-          @if (current()[d - 1] !== undefined) { <circle class="end" [attr.cx]="x(d)" [attr.cy]="y(current()[d - 1])" r="4.5" /> }
-        }
-      </svg>
-      @if (hover(); as d) {
-        <div class="tip" [style.left.px]="tipX(d)">
-          <small>dia {{ d }}</small>
-          @if (current()[d - 1] !== undefined) { <div><i class="key cur"></i><b>{{ fmt(current()[d - 1], false) }}</b> este mês</div> }
-          @if (previous()[d - 1] !== undefined) { <div><i class="key prev"></i><b>{{ fmt(previous()[d - 1], false) }}</b> mês passado</div> }
-        </div>
-      }
-    }
-    <div class="legend"><span><i class="key cur"></i>Este mês</span><span><i class="key prev"></i>Mês passado</span></div>
+    <div class="legend">
+      <span><i class="key cur"></i>Este mês</span>
+      <span><i class="key proj"></i>Previsão</span>
+      <span><i class="key avg"></i>Média 3 meses</span>
+    </div>
+    <div class="chart-box" style="height:220px"><canvas #cv role="img" [attr.aria-label]="label()"></canvas></div>
   `,
-  host: { style: 'display:block;position:relative' },
+  host: { style: 'display:block' },
 })
 export class Pace {
   /** gasto acumulado por dia (índice 0 = dia 1), em centavos */
   current = input<number[]>([]);
-  previous = input<number[]>([]);
+  /** média acumulada dos 3 meses anteriores, dia a dia */
+  average = input<number[]>([]);
   days = input(31);
-  w = hostWidth();
-  hover = signal<number | null>(null);
-  readonly H = 170; readonly T = 10; readonly L = 66; readonly R = 70;
-
-  max = computed(() => niceMax(Math.max(1, ...this.current(), ...this.previous())));
-  ticks = computed(() => [0, this.max() / 2, this.max()]);
-  xTicks = computed(() => [1, 10, 20, this.days()]);
-  label = computed(() => {
-    const c = this.current(), p = this.previous();
-    return `Gasto acumulado: ${money(c.at(-1) ?? 0)} até o dia ${c.length}; mês passado no mesmo dia: ${money(p[c.length - 1] ?? 0)}`;
+  projection = computed(() => {
+    const cur = this.current(), avg = this.average(), n = cur.length;
+    if (!n || !avg.length) return [];
+    const base = cur[n - 1], from = avg[n - 1] ?? 0;
+    // segue o formato da média daqui até o fim do mês
+    return Array.from({ length: this.days() }, (_, i) => (i < n - 1 ? null : base + Math.max(0, (avg[i] ?? avg.at(-1)!) - from)));
   });
-
-  x = (day: number) => this.L + ((day - 1) / Math.max(1, this.days() - 1)) * (this.w() - this.L - this.R);
-  y = (v: number) => this.H - (v / this.max()) * (this.H - this.T);
-  fmt = (v: number, compact = true) => (hidden() ? '•••' : brl(v, compact));
-  path = (s: number[]) => s.map((v, i) => `${i ? 'L' : 'M'}${this.x(i + 1).toFixed(1)},${this.y(v).toFixed(1)}`).join('');
-  area = (s: number[]) => (s.length ? `${this.path(s)}L${this.x(s.length)},${this.H}L${this.x(1)},${this.H}Z` : '');
-  tipX = (d: number) => Math.min(this.w() - 170, Math.max(0, this.x(d) - 80));
-
-  move(e: PointerEvent) {
-    const r = (e.currentTarget as SVGElement).getBoundingClientRect();
-    const t = (e.clientX - r.left - this.L) / (this.w() - this.L - this.R);
-    this.hover.set(Math.min(this.days(), Math.max(1, Math.round(t * (this.days() - 1)) + 1)));
+  label = computed(() => `Gasto acumulado: ${money(this.current().at(-1) ?? 0, false)} até o dia ${this.current().length}`);
+  cv = viewChild.required<ElementRef<HTMLCanvasElement>>('cv');
+  private c = useChart(this.cv, (t) => {
+    const cur = this.current(), n = cur.length;
+    const labels = Array.from({ length: this.days() }, (_, i) => String(i + 1));
+    return {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Este mês', data: cur, borderColor: t.out, borderWidth: 3, tension: 0.35, fill: 'origin',
+            backgroundColor: (ctx: ScriptableContext<'line'>) => {
+              const { ctx: g, chartArea } = ctx.chart;
+              if (!chartArea) return alpha(t.out, 0.15);
+              const grad = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+              grad.addColorStop(0, alpha(t.out, 0.32)); grad.addColorStop(1, alpha(t.out, 0));
+              return grad;
+            },
+            pointRadius: cur.map((_, i) => (i === n - 1 ? 6 : 0)), pointHoverRadius: 6,
+            pointBackgroundColor: t.out, pointBorderColor: t.surface, pointBorderWidth: 3, order: 1,
+          },
+          {
+            label: 'Previsão', data: this.projection(), borderColor: alpha(t.out, 0.55), borderWidth: 2, borderDash: [6, 6],
+            tension: 0.35, pointRadius: 0, pointHoverRadius: 4, fill: false, spanGaps: false, order: 2,
+          },
+          {
+            label: 'Média 3 meses', data: this.average(), borderColor: t.muted, borderWidth: 2, borderDash: [2, 5],
+            borderCapStyle: 'round', tension: 0.35, pointRadius: 0, pointHoverRadius: 4, fill: false, order: 3,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 900, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        layout: { padding: { top: 8, right: 8 } },
+        scales: {
+          x: { grid: { display: false }, border: { color: t.line }, ticks: { color: t.muted, font: { family: t.font, size: 11 }, autoSkip: false,
+                callback: (_v, i) => ([0, 4, 9, 14, 19, 24, this.days() - 1].includes(i) ? String(i + 1) : '') } },
+          y: { beginAtZero: true, border: { display: false }, grid: { color: t.line }, ticks: { color: t.muted, font: { family: t.font, size: 11 }, maxTicksLimit: 4,
+                callback: (v) => money(Number(v)) } },
+        },
+        plugins: {
+          legend: { display: false },
+          crosshair: { color: alpha(t.ink2, 0.5) },
+          tooltip: {
+            ...tooltipBase(t),
+            filter: (item: TooltipItem<'line'>) => item.raw !== null && item.raw !== undefined,
+            callbacks: {
+              title: (items: TooltipItem<'line'>[]) => `Dia ${items[0].label}`,
+              label: (item: TooltipItem<'line'>) => ` ${money(Number(item.raw), false)}  ${item.dataset.label}`,
+            },
+          },
+        } as never,
+      },
+      plugins: [crosshair],
+    } as ChartConfiguration;
+  });
+  constructor() {
+    effect(() => { this.current(); this.average(); this.days(); hidden(); this.c.update(); });
   }
 }
 
-// ───────────────────────── Entradas × saídas por mês (colunas agrupadas) ─────────────────────────
+// ───────────────────────── Entradas × saídas por mês (colunas + linha de resultado, mesmo eixo) ─────────────────────────
 export interface FlowMonth { key: string; label: string; inc: number; exp: number }
 
 @Component({
   selector: 'g-flow',
   template: `
-    <div class="legend"><span><i class="sw in"></i>Entradas</span><span><i class="sw out"></i>Saídas</span></div>
-    @if (w(); as W) {
-      <svg [attr.width]="W" [attr.height]="H + 26" role="img" aria-label="Entradas e saídas por mês">
-        @for (t of ticks(); track t) {
-          <line class="grid" [attr.x1]="L" [attr.x2]="W" [attr.y1]="y(t)" [attr.y2]="y(t)" />
-          <text class="tick" [attr.x]="L - 8" [attr.y]="y(t) + 4" text-anchor="end">{{ fmt(t) }}</text>
-        }
-        @for (m of months(); track m.key; let i = $index) {
-          <g class="col" [class.dim]="active() && active() !== m.key" tabindex="0" role="button"
-             [attr.aria-label]="m.label + ': entradas ' + fmt(m.inc, false) + ', saídas ' + fmt(m.exp, false)"
-             (pointerenter)="hover.set(i)" (pointerleave)="hover.set(null)" (focus)="hover.set(i)" (blur)="hover.set(null)"
-             (click)="pick.emit(m.key)" (keydown.enter)="pick.emit(m.key)" [style.--i]="i">
-            <rect class="hit" [attr.x]="band(i)" [attr.y]="T" [attr.width]="bw()" [attr.height]="H - T" />
-            <path class="bar in" [attr.d]="bar(cx(i) - colW() - 1, m.inc)" />
-            <path class="bar out" [attr.d]="bar(cx(i) + 1, m.exp)" />
-            <text class="tick" [attr.x]="cx(i)" [attr.y]="H + 18" text-anchor="middle" [class.strong]="m.key === active()">{{ m.label }}</text>
-          </g>
-        }
-      </svg>
-      @if (hover() !== null) {
-        @let m = months()[hover()!];
-        <div class="tip" [style.left.px]="Math.min(W - 180, Math.max(0, cx(hover()!) - 90))">
-          <small>{{ m.label }}</small>
-          <div><i class="key in"></i><b>{{ fmt(m.inc, false) }}</b> entradas</div>
-          <div><i class="key out"></i><b>{{ fmt(m.exp, false) }}</b> saídas</div>
-          <div class="muted">resultado <b>{{ fmt(m.inc - m.exp, false) }}</b></div>
-        </div>
-      }
-    }
+    <div class="legend">
+      <span><i class="sw in"></i>Entradas</span><span><i class="sw out"></i>Saídas</span><span><i class="key net"></i>Resultado</span>
+    </div>
+    <div class="chart-box" style="height:260px"><canvas #cv role="img" aria-label="Entradas, saídas e resultado por mês"></canvas></div>
   `,
-  host: { style: 'display:block;position:relative' },
+  host: { style: 'display:block' },
 })
 export class Flow {
   months = input<FlowMonth[]>([]);
   active = input<string>('');
   pick = output<string>();
-  w = hostWidth();
-  hover = signal<number | null>(null);
-  Math = Math;
-  readonly H = 180; readonly T = 8; readonly L = 66;
-
-  max = computed(() => niceMax(Math.max(1, ...this.months().flatMap((m) => [m.inc, m.exp]))));
-  ticks = computed(() => [0, this.max() / 2, this.max()]);
-  bw = computed(() => (this.w() - this.L) / Math.max(1, this.months().length));
-  colW = computed(() => Math.min(22, Math.max(6, this.bw() / 2 - 8)));
-  band = (i: number) => this.L + i * this.bw();
-  cx = (i: number) => this.band(i) + this.bw() / 2;
-  y = (v: number) => this.H - (v / this.max()) * (this.H - this.T);
-  fmt = (v: number, compact = true) => (hidden() ? '•••' : brl(v, compact));
-  /** coluna com topo arredondado 4px e base reta */
-  bar(x: number, v: number) {
-    const w = this.colW(), y = this.y(v), r = Math.min(4, (this.H - y) / 2, w / 2);
-    if (v <= 0) return '';
-    return `M${x},${this.H}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${this.H}Z`;
+  cv = viewChild.required<ElementRef<HTMLCanvasElement>>('cv');
+  private c = useChart(this.cv, (t) => {
+    const m = this.months();
+    const grad = (color: string) => (ctx: { chart: Chart }) => {
+      const { ctx: g, chartArea } = ctx.chart;
+      if (!chartArea) return color;
+      const gr = g.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+      gr.addColorStop(0, color); gr.addColorStop(1, alpha(color, 0.55));
+      return gr;
+    };
+    return {
+      type: 'bar',
+      data: {
+        labels: m.map((x) => x.label),
+        datasets: [
+          { type: 'bar', label: 'Entradas', data: m.map((x) => x.inc), backgroundColor: grad(t.in), hoverBackgroundColor: t.in,
+            borderRadius: { topLeft: 8, topRight: 8 }, borderSkipped: 'bottom', maxBarThickness: 26, categoryPercentage: 0.62, barPercentage: 0.92, order: 2 },
+          { type: 'bar', label: 'Saídas', data: m.map((x) => x.exp), backgroundColor: grad(t.out), hoverBackgroundColor: t.out,
+            borderRadius: { topLeft: 8, topRight: 8 }, borderSkipped: 'bottom', maxBarThickness: 26, categoryPercentage: 0.62, barPercentage: 0.92, order: 2 },
+          { type: 'line', label: 'Resultado', data: m.map((x) => x.inc - x.exp), borderColor: t.ink, borderWidth: 2, tension: 0.3,
+            pointRadius: 4, pointHoverRadius: 6, pointBackgroundColor: t.surface, pointBorderColor: t.ink, pointBorderWidth: 2, order: 1 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: { duration: 800, easing: 'easeOutQuart' },
+        interaction: { mode: 'index', intersect: false },
+        onHover: (e, els) => ((e.native?.target as HTMLElement).style.cursor = els.length ? 'pointer' : 'default'),
+        onClick: (_e, els) => { if (els.length) this.pick.emit(m[els[0].index].key); },
+        scales: {
+          x: { grid: { display: false }, border: { color: t.line },
+               ticks: { color: (c) => (m[c.index]?.key === this.active() ? t.ink : t.muted), font: (c) => ({ family: t.font, size: 11, weight: m[c.index]?.key === this.active() ? 700 : 500 }) } },
+          y: { border: { display: false }, ticks: { color: t.muted, font: { family: t.font, size: 11 }, maxTicksLimit: 5, callback: (v) => money(Number(v)) },
+               grid: { color: (c) => (c.tick.value === 0 ? alpha(t.ink2, 0.6) : t.line), lineWidth: (c) => (c.tick.value === 0 ? 1.5 : 1) } },
+        },
+        plugins: {
+          legend: { display: false },
+          crosshair: { color: 'transparent' },
+          tooltip: { ...tooltipBase(t), callbacks: { label: (item: TooltipItem<'bar'>) => ` ${money(Number(item.raw), false)}  ${item.dataset.label}` } },
+        } as never,
+      },
+    } as ChartConfiguration;
+  });
+  constructor() {
+    effect(() => { this.months(); this.active(); hidden(); this.c.update(); });
   }
 }
 
