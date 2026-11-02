@@ -2,9 +2,10 @@ import { Component, computed, effect, inject, input, signal, untracked } from '@
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Meter } from '../charts';
-import { BrlPipe, DmyPipe, Invoice, Store, Tx, bankColor, catIcon, monthLabel, must, notify, sb, toCents, today } from '../core';
+import { BrlPipe, Card, DmyPipe, Invoice, Store, Tx, bankColor, catIcon, monthLabel, must, notify, sb, toCents, today } from '../core';
 import { Icon } from '../icon';
 import { BankLogo, networkLogo } from '../banks';
+import { invoiceStatus } from '../invoice';
 
 type Inv = Invoice & { due: number };
 
@@ -36,7 +37,8 @@ type Inv = Invoice & { due: number };
     @if (card(); as c) {
       <section class="panel reveal">
         <g-meter label="Limite usado" [value]="c.limit_cents - c.available" [max]="c.limit_cents" />
-        <p class="muted small" style="margin:.6rem 0 0">Fecha dia {{ c.closing_day }} · vence dia {{ c.due_day }}</p>
+        <p class="muted small" style="margin:.6rem 0 0">Fecha dia {{ c.closing_day }} · vence dia {{ c.due_day }}
+          @if (c.current_invoice_date && c.current_invoice_due > 0) { · fatura {{ c.current_invoice_date | dmy: true }} <b [class]="'inv-' + status(c).tone">{{ status(c).text }}</b> }</p>
       </section>
 
       <div class="inv-strip reveal" role="tablist" aria-label="Faturas">
@@ -91,6 +93,7 @@ export class Cards {
   router = inject(Router);
   c = input<string>(); // ?c=<card id>
   hoje = today();
+  status = (c: Card) => invoiceStatus(c.current_invoice_date, c.closing_day, c.due_day, this.hoje);
   cards = computed(() => this.store.cards().filter((x) => !x.archived));
   card = computed(() => this.cards().find((x) => x.id === this.c()) ?? this.cards()[0]);
   invoices = signal<Inv[]>([]);

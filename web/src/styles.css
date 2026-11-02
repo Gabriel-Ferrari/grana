@@ -622,3 +622,7 @@ textarea.bare { min-height: 44px; resize: none; }
   .sel-bar .grow { flex: 1 1 calc(100% - 3rem); flex-wrap: nowrap; white-space: nowrap; overflow: hidden; }
 }
 body:has(.sel-bar) .toast { margin-bottom: 6.6rem; }
+
+/* situação da fatura */
+.inv-closed { color: var(--ink-2); font-weight: 650; }
+.inv-late { color: var(--danger); font-weight: 700; }

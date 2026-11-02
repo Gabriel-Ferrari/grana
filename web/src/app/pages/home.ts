@@ -1,7 +1,8 @@
 import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Pace, RankBars, RankItem } from '../charts';
-import { BrlPipe, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, notify, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
+import { BrlPipe, Card, DmyPipe, Invoice, Store, Tx, addMonths, bankColor, brl, catIcon, hidden, notify, monthEnd, monthLabel, monthStart, must, sb, today, toggleHidden } from '../core';
+import { invoiceStatus } from '../invoice';
 import { Icon } from '../icon';
 import { BankLogo } from '../banks';
 import { ChipOption, ChipSelect } from '../fields';
@@ -135,7 +136,7 @@ import { ChipOption, ChipSelect } from '../fields';
             @for (c of cards(); track c.id) {
               <a class="item click" routerLink="/cartoes" [queryParams]="{ c: c.id }" style="flex-wrap:wrap">
                 <g-bank [name]="c.name" [institution]="c.institution" fallback="credit_card" />
-                <div class="grow"><div class="title">{{ c.name }}</div><div class="sub">fatura {{ c.current_invoice_date | dmy: true }} · {{ c.current_invoice_due | brl }}</div></div>
+                <div class="grow"><div class="title">{{ c.name }}</div><div class="sub">@if (c.current_invoice_due > 0) {<span [class]="'inv-' + status(c).tone">{{ status(c).text }}</span> · {{ c.current_invoice_due | brl }}} @else {fatura {{ c.current_invoice_date | dmy: true }} sem gastos}</div></div>
                 <span class="amt small">{{ c.available | brl }}<br /><span class="muted" style="font-weight:600">disponível</span></span>
                 <div class="meter" [attr.data-state]="c.available < c.limit_cents * .15 ? 'over' : c.available < c.limit_cents * .4 ? 'warn' : 'ok'" style="width:100%;height:6px;margin:.35rem 0 0">
                   <span class="fill" [style.width.%]="100 - (c.available / (c.limit_cents || 1)) * 100"></span>
@@ -167,6 +168,7 @@ export class Home {
   hidden = hidden;
   toggleHidden = toggleHidden;
   hoje = today();
+  status = (c: Card) => invoiceStatus(c.current_invoice_date, c.closing_day, c.due_day, this.hoje);
   m = monthStart(this.hoje);
   monthShort = monthLabel(this.m, true).replace('.', '');
   dateLabel = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
