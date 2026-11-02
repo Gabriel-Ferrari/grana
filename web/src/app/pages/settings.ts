@@ -133,7 +133,9 @@ type Row = Record<string, any>;
                   <input name="hj" type="number" step="0.01" [(ngModel)]="e.row['_today']" />
                   <span class="muted small">Se mudar, lança um "Ajuste de saldo" com a diferença (como no Organizze).</span></label>
               }
+@if (store.v2()) {
               <label class="check"><input name="hd" type="checkbox" [(ngModel)]="e.row['hide_from_total']" /> Não somar no saldo geral (continua no fluxo de caixa dela)</label>
+              }
             }
             @case ('cards') {
               <label>Bandeira</label>
@@ -166,7 +168,7 @@ type Row = Record<string, any>;
                   @for (c of catsOf(e.row['kind']); track c['id']) { @if (!c['parent_id'] && c['id'] !== e.row['id']) { <option [ngValue]="c['id']">{{ c['name'] }}</option> } }
                 </select></label>
               </div>
-              @if (e.row['kind'] === 'expense' && !e.row['parent_id']) {
+              @if (store.v2() && e.row['kind'] === 'expense' && !e.row['parent_id']) {
                 <label class="check"><input name="es" type="checkbox" [(ngModel)]="e.row['essential']" /> Gasto essencial (moradia, mercado, saúde…) — usado no equilíbrio 50/30</label>
               }
               <label>Ícone</label>
@@ -234,7 +236,7 @@ export class Settings {
       must(sb.from('accounts').select('*').order('name')),
       must(sb.from('cards').select('*').order('name')),
       must(sb.from('categories').select('*').order('name')),
-      must(sb.rpc('report_by_tag', { p_from: '2000-01-01', p_to: '2100-12-31' })),
+      sb.rpc('report_by_tag', { p_from: '2000-01-01', p_to: '2100-12-31' }).then((r) => r.data ?? []),
     ]);
     this.rows.set({ accounts: a, cards: c, categories: k });
     this.tags.set((t as { tag: string; n: number }[]).sort((x, y) => x.tag.localeCompare(y.tag)));

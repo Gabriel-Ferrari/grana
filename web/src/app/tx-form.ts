@@ -109,6 +109,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             <div>
               <label class="tx-row"><span class="lbl">Tags</span><span class="tx-val"><g-icon name="sell" class="muted" /><input class="bare" name="t" [(ngModel)]="f.tags" placeholder="viagem, presente…" /></span></label>
               <label class="tx-row"><span class="lbl">Observação</span><span class="tx-val"><g-icon name="notes" class="muted" /><textarea class="bare" name="obs" rows="2" [(ngModel)]="f.notes" placeholder="Opcional"></textarea></span></label>
+              @if (store.v2()) {
               <div class="tx-row"><span class="lbl">Anexos</span>
                 <div class="att-list">
                   @for (a of f.attachments; track a) {
@@ -119,6 +120,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                     <input type="file" accept="image/*,application/pdf" multiple hidden (change)="upload($event)" [disabled]="uploading()" /></label>
                 </div>
               </div>
+              }
             </div>
           </div>
         }
@@ -339,7 +341,8 @@ export class TxForm implements OnInit {
       } else {
         const base = {
           description: this.f.description.trim(), account_id, card_id, category_id: this.f.category_id || null,
-          tags, notes: this.f.notes || null, paid: card_id ? true : this.f.paid, attachments: this.f.attachments,
+          tags, notes: this.f.notes || null, paid: card_id ? true : this.f.paid,
+          ...(this.f.attachments.length || d.attachments?.length ? { attachments: this.f.attachments } : {}),
         };
         if (d.id) {
           await must(sb.from('transactions').update({ ...base, amount: sign * total, date: this.f.date, reviewed: true }).eq('id', d.id));

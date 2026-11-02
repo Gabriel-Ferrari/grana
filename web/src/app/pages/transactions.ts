@@ -81,7 +81,7 @@ type Inv = Invoice & { due: number; running_due: number };
                   @if (t.recurring) { <span class="tag"><g-icon name="repeat" [size]="13" />fixo</span> }
                   @if (t.source === 'notification') { <span class="tag auto"><g-icon name="notifications" [size]="13" />auto</span> }
                   @if (t.source === 'openfinance') { <span class="tag auto"><g-icon name="account_balance" [size]="13" />banco</span> }
-                  @if (t.attachments.length) { <span class="tag" title="Tem anexo"><g-icon name="attach_file" [size]="13" /></span> }
+                  @if (t.attachments?.length) { <span class="tag" title="Tem anexo"><g-icon name="attach_file" [size]="13" /></span> }
                   @for (tag of t.tags; track tag) { <span class="tag"><g-icon name="sell" [size]="13" />{{ tag }}</span> }
                 </div>
                 <div class="sub">

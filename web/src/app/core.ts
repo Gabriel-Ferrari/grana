@@ -135,6 +135,8 @@ export class Store {
   recovery = signal(false);
 
   catById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
+  /** banco já tem a migração 20261102080000 (anexos, essenciais, balanço…)? Até lá, essas partes ficam escondidas. */
+  v2 = computed(() => this.categories().some((c) => c.essential !== undefined));
   originName = computed(() => {
     const m = new Map<string, string>();
     this.accounts().forEach((a) => m.set(a.id, a.name));

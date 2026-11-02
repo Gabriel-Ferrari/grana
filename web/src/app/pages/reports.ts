@@ -17,10 +17,12 @@ import { Icon } from '../icon';
         </div>
         <input type="month" style="width:auto" [ngModel]="from()" (ngModelChange)="from.set($event); preset.set(0)" aria-label="De" />
         <input type="month" style="width:auto" [ngModel]="to()" (ngModelChange)="to.set($event); preset.set(0)" aria-label="Até" />
+        @if (store.v2()) {
         <div class="seg" role="group" aria-label="Compras no cartão contam pela data da" title="Compras no cartão contam pela data da compra (ou da parcela) ou pelo vencimento da fatura">
           <button [class.on]="!byInvoice()" (click)="setByInvoice(false)"><g-icon name="credit_card" [size]="16" />Compra</button>
           <button [class.on]="byInvoice()" (click)="setByInvoice(true)">Fatura</button>
         </div>
+        }
       </div>
     </div>
 
@@ -144,7 +146,7 @@ export class Reports {
   recIcon = (r: Recurring) => catIcon(this.store.catById().get(r.category_id ?? ''));
 
   constructor() {
-    effect(() => { this.store.version(); const f = this.from(), t = this.to(), bi = this.byInvoice(); untracked(() => this.fetch(f, t, bi)); });
+    effect(() => { this.store.version(); const f = this.from(), t = this.to(), bi = this.byInvoice() && this.store.v2(); untracked(() => this.fetch(f, t, bi)); });
     effect(() => { this.store.version(); untracked(() => this.fetchRecurring()); });
   }
 
@@ -164,11 +166,11 @@ export class Reports {
   async fetch(from: string, to: string, byInvoice = false) {
     if (!from || !to) return;
     this.loading.set(true);
-    const args = { p_from: from + '-01', p_to: monthEnd(to + '-01'), p_by_invoice: byInvoice };
+    const args = { p_from: from + '-01', p_to: monthEnd(to + '-01'), ...(byInvoice ? { p_by_invoice: true } : {}) };
     const end = monthEnd(to + '-01') < today() ? monthEnd(to + '-01') : today();
     const [m, c, b, t] = await Promise.all([
       must(sb.rpc('report_by_month', args)), must(sb.rpc('report_by_category', args)),
-      must(sb.rpc('balance_by_day', { p_from: from + '-01', p_to: end })), must(sb.rpc('report_by_tag', args)),
+      sb.rpc('balance_by_day', { p_from: from + '-01', p_to: end }).then((r) => r.data ?? []), sb.rpc('report_by_tag', args).then((r) => r.data ?? []),
     ]);
     this.balDays.set(b as never);
     this.tags.set(t as never);

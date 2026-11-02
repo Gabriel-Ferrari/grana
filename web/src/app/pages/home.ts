@@ -82,6 +82,7 @@ import { ChipOption, ChipSelect } from '../fields';
           <g-rank-bars [items]="byCategory()" (pick)="openCategory($event)" empty="Nenhuma despesa neste mês ainda." />
         </section>
 
+        @if (store.v2()) {
         <section class="panel">
           <div class="panel-head"><div><h2>Equilíbrio financeiro</h2><p class="muted small" style="margin:.15rem 0 0">Regra 50/30/20: essenciais até 50% da renda, o resto até 30%, guardar 20%</p></div>
             <a routerLink="/ajustes">Essenciais <g-icon name="chevron_right" [size]="18" /></a></div>
@@ -96,6 +97,7 @@ import { ChipOption, ChipSelect } from '../fields';
             <div class="empty-state"><g-icon name="savings" /><div><b>Sem renda lançada neste mês</b>Quando o salário entrar, o grana mostra quanto dá para gastar em cada lado e quanto sobra para guardar.</div></div>
           }
         </section>
+        }
       </div>
 
       <div class="stack reveal">
