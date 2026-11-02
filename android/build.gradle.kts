@@ -22,3 +22,8 @@ android {
 }
 
 kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_17) } }
+
+dependencies {
+    // Trusted Web Activity: o ícone "grana" abre o app web no Chrome em tela cheia (login Google não roda em WebView).
+    implementation("com.google.androidbrowserhelper:androidbrowserhelper:2.7.4")
+}

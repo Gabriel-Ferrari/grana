@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.grana.coletor",
+      "sha256_cert_fingerprints": [
+        "6B:5A:21:83:F4:66:72:66:54:38:76:5E:1F:7A:1A:74:34:74:E3:E1:88:BE:6A:03:6B:DC:0C:12:FD:FD:02:CD"
+      ]
+    }
+  }
+]

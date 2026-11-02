@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">grana</string>
+    <string name="coletor_name">grana · coletor</string>
+    <string name="shortcut_coletor">Configurar coletor</string>
+    <color name="grana_green">#1f6f4a</color>
+    <color name="grana_bg">#f6f7f1</color>
+    <!-- App -> site. O lado site -> app (que tira a barra de URL da TWA) é web/public/.well-known/assetlinks.json. -->
+    <string name="asset_statements" translatable="false">[{\"relation\":[\"delegate_permission/common.handle_all_urls\"],\"target\":{\"namespace\":\"web\",\"site\":\"https://grana.ferrari-gabriel2002.workers.dev\"}}]</string>
+</resources>

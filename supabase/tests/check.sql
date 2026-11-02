@@ -41,6 +41,14 @@ begin
   assert (select is_paid from invoices where card_id = card and invoice_date = '2026-11-05'), 'fatura paga';
   assert (select available from card_status where id = card) = 949000 - 1615, 'limite liberado';
 
+  -- pagamento a mais vira crédito na fatura seguinte (caso real Bradesco set->out/26)
+  insert into transactions (description, amount, date, card_id) values ('compra dez', -100000, '2026-11-20', card);
+  insert into transactions (description, amount, date, account_id, pays_card_id, invoice_date)
+  values ('pagou a mais', -50000, '2026-11-06', acc, card, '2026-11-05');
+  assert (select due from invoices where card_id = card and invoice_date = '2026-12-05') = 101615 - 50000, 'crédito abate próxima fatura';
+  assert (select available from card_status where id = card) = 949000 - (101615 - 50000), 'limite com crédito';
+  delete from transactions where description in ('compra dez', 'pagou a mais');
+
   -- mudar data recalcula fatura
   update transactions set date = '2026-10-20' where description = 'CARREFOUR';
   assert (select invoice_date from transactions where description = 'CARREFOUR') = '2026-11-05', 'recalcula fatura';

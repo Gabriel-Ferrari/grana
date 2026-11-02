@@ -4,7 +4,7 @@ Controle financeiro pessoal no estilo Organizze, com infraestrutura **gratuita**
 lançamentos automáticos a partir das **notificações dos bancos** no Android.
 
 ```
-Android (Grana Coletor) ──POST texto cru──▶ Supabase Edge Function `ingest` ──▶ Postgres (RLS)
+Android (grana coletor) ──POST texto cru──▶ Supabase Edge Function `ingest` ──▶ Postgres (RLS)
                                                parser + conta/cartão + categoria        ▲
 Angular (Cloudflare Workers) ── supabase-js + login Google ─────────────────────────────────┘
 ```
@@ -14,7 +14,7 @@ Angular (Cloudflare Workers) ── supabase-js + login Google ─────�
 | `supabase/migrations` | schema, regras de fatura, views de saldo/fatura/relatório, RLS, categorias padrão |
 | `supabase/functions/ingest` | recebe notificações, parser (`parser.ts`) |
 | `web/` | app Angular: visão geral, lançamentos, cartões/faturas, relatórios, limites, notificações, ajustes |
-| `android/` | coletor de notificações (Kotlin, sem dependências) |
+| `android/` | app Android "grana": app web em tela cheia (TWA/Chrome) + coletor de notificações (Kotlin) |
 | `scripts/import-organizze.mjs` | migra seus dados do Organizze (API v2), idempotente |
 | `docs/engenharia-reversa.md` | o que foi descoberto sobre o Organizze |
 
@@ -58,14 +58,26 @@ Produção atual: Supabase `mfsblnrygzwdefvnezas`, Google Cloud `grana-513513`, 
 3. No ar: https://grana.ferrari-gabriel2002.workers.dev — Site URL e Redirect URL (`…/**`) já cadastrados no Supabase.
 
 ### 4. Celular
-1. `cd android && ./gradlew assembleDebug && adb install -r build/outputs/apk/debug/grana-coletor-debug.apk`
-2. No app web: **Notificações → Gerar token**. No coletor: cole o endpoint
-   `https://SEU_REF.supabase.co/functions/v1/ingest` e o token, Salvar, **Enviar teste**.
-   (Por segurança, configurar via `adb am start --es …` só funciona com o app sem token; para trocar: pela tela ou `adb shell pm clear dev.grana.coletor`.)
-3. Samsung: *Configurações → Notificações → Configurações avançadas → Acesso às notificações do dispositivo* → ative **Grana Coletor**.
-   *Aplicativos → Grana Coletor → Bateria → Não restringir*; em *Bateria → Limites de uso em segundo plano* coloque em
-   **"Aplicativos que nunca entram em suspensão"**.
-4. Em **Ajustes** do app web, preencha em cada conta/cartão o **app que notifica** e o **final do cartão**.
+Um APK só (`dev.grana.coletor`): o ícone **grana** abre o app web em tela cheia (Trusted Web Activity no Chrome;
+o login Google funciona, em WebView não) e o mesmo app roda o coletor de notificações em segundo plano.
+A tela do coletor não tem ícone: **toque longo em grana → Configurar coletor**, ou pelo link `grana://setup`.
+
+1. Build: `cd android && ./gradlew assembleDebug` → `android/build/outputs/apk/debug/grana-coletor-debug.apk`.
+2. Instalar: `adb install -r android/build/outputs/apk/debug/grana-coletor-debug.apk`, ou copie o APK para o celular e
+   abra (permita *Instalar apps desconhecidos* para o app de arquivos). Use sempre a mesma chave
+   (`~/.android/debug.keystore`): assim o `-r` mantém dados e acesso às notificações, e a digital continua batendo com
+   `web/public/.well-known/assetlinks.json` (é o que tira a barra de URL; trocou de chave → gere o SHA-256 com
+   `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android` e atualize o arquivo).
+3. Configurar o coletor: no app web, **Notificações → Gerar token** e toque no link `grana://setup?endpoint=…&token=…`.
+   O coletor abre com endpoint e token **preenchidos, mas nada salvo**: confira o endpoint
+   (`https://SEU_REF.supabase.co/functions/v1/ingest`) e toque em **Confirmar configuração**, depois **Enviar teste**.
+   Qualquer página pode disparar esse link, por isso ele nunca salva sozinho. Sem o link: cole endpoint e token na tela
+   e toque em Salvar. (Via `adb shell am start -n dev.grana.coletor/.MainActivity --es endpoint … --es token …` só
+   funciona com o app sem token; para trocar use a tela ou `adb shell pm clear dev.grana.coletor`.)
+4. Samsung: *Configurações → Notificações → Configurações avançadas → Acesso às notificações do dispositivo* → ative
+   **grana · coletor**. *Aplicativos → grana → Bateria → Não restringir*; em *Bateria → Limites de uso em segundo plano*
+   coloque em **"Aplicativos que nunca entram em suspensão"**.
+5. Em **Ajustes** do app web, preencha em cada conta/cartão o **app que notifica** e o **final do cartão**.
    Com isso as notificações viram lançamentos automáticos; o que não casar fica em **Notificações** para revisar.
    Quando um banco mandar um formato que o parser não entende, copie o texto para `parser.test.ts` e ajuste `parser.ts`.
 

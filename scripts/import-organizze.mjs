@@ -73,10 +73,13 @@ const cardRows = await upsert('cards', cards.map((c) => ({
   limit_cents: c.limit_cents ?? 0, closing_day: c.closing_day, due_day: c.due_day,
 })));
 const cardId = new Map(cardRows.map((r) => [r.ext_id, r.id]));
+// ATENÇÃO: o id de fatura do Organizze é sequencial POR CARTÃO (Bradesco, Sicoob e Nubank têm "fatura 322"),
+// então a chave precisa ser cartão + fatura.
 const invoiceDate = new Map();
+const invKey = (cardId, invoiceId) => `${cardId}:${invoiceId}`;
 for (const c of cards) {
   for (let y = +START.slice(0, 4); y <= new Date().getFullYear() + 1; y++) {
-    for (const i of await org(`/credit_cards/${c.id}/invoices?start_date=${y}-01-01&end_date=${y}-12-31`)) invoiceDate.set(i.id, i.date);
+    for (const i of await org(`/credit_cards/${c.id}/invoices?start_date=${y}-01-01&end_date=${y}-12-31`)) invoiceDate.set(invKey(c.id, i.id), i.date);
   }
 }
 
@@ -108,7 +111,8 @@ const rows = txs.map((t) => {
     description: t.description || '(sem descrição)', amount: t.amount_cents, date: t.date, paid: !!t.paid,
     card_id: card ?? null,
     account_id: card ? null : accId.get(`org:acc:${t.account_id}`) ?? null,
-    invoice_date: card ? invoiceDate.get(t.credit_card_invoice_id) ?? null : paysCard ? invoiceDate.get(t.paid_credit_card_invoice_id) ?? null : null,
+    invoice_date: card ? invoiceDate.get(invKey(t.credit_card_id, t.credit_card_invoice_id)) ?? null
+      : paysCard ? invoiceDate.get(invKey(t.paid_credit_card_id, t.paid_credit_card_invoice_id)) ?? null : null,
     pays_card_id: paysCard ?? null,
     category_id: t.category_id ? catId.get(t.category_id) ?? null : null,
     transfer_id: t.oposite_transaction_id ? uuidFrom(`org:transfer:${Math.min(t.id, t.oposite_transaction_id)}`) : null,
@@ -126,5 +130,24 @@ for (let i = 0; i < valid.length; i += 500) {
   await upsert('transactions', valid.slice(i, i + 500));
   process.stdout.write(`\rgravados ${Math.min(i + 500, valid.length)}/${valid.length}`);
 }
-console.log(`\nOK: ${accounts.length} contas, ${cards.length} cartões, ${orgCats.length} categorias, ${valid.length} lançamentos.`);
+// 6. Pagamentos de fatura lançados no Organizze como despesa comum ("Pagamento de fatura - Nubank - Dezembro de 2022"):
+// liga ao cartão citado e à fatura com vencimento mais próximo. Sem isso contam como gasto duas vezes
+// e a fatura fica "não paga". Cartão que não existe mais (ex.: Rappi) fica como despesa: é o único registro do gasto.
+const invs = cardRows.length ? await db('GET', `invoices?select=card_id,invoice_date,total,paid&card_id=in.(${cardRows.map((r) => r.id)})`) : [];
+const loose = await db('GET', `transactions?user_id=eq.${user_id}&pays_card_id=is.null&account_id=not.is.null&amount=lt.0&description=ilike.*fatura*&select=id,description,date`);
+let linked = 0;
+for (const t of loose) {
+  const card = cardRows.find((c) => t.description.toLowerCase().includes(c.name.trim().toLowerCase()));
+  if (!card) continue;
+  // só fatura ainda em aberto: se o Organizze já a considera paga, o lançamento é outra coisa (fica como despesa)
+  const near = invs.filter((i) => i.card_id === card.id && i.paid < i.total)
+    .map((i) => ({ i, d: (Date.parse(i.invoice_date) - Date.parse(t.date)) / 864e5 }))
+    .filter((x) => x.d >= -20 && x.d <= 40).sort((a, b) => Math.abs(a.d) - Math.abs(b.d))[0];
+  if (!near) continue;
+  await db('PATCH', `transactions?id=eq.${t.id}`, { pays_card_id: card.id, invoice_date: near.i.invoice_date }, 'return=minimal');
+  near.i.paid += 1; // ponytail: marca como tocada; precisão real vem do recálculo da view
+  linked++;
+}
+console.log(`\n${linked} pagamentos de fatura avulsos ligados aos cartões.`);
+console.log(`OK: ${accounts.length} contas, ${cards.length} cartões, ${orgCats.length} categorias, ${valid.length} lançamentos.`);
 console.log('Confira os saldos das contas no app; se divergir, ajuste o "saldo inicial" da conta em Ajustes.');
