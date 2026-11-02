@@ -295,6 +295,8 @@ export class TxForm implements OnInit {
       }
       await this.store.load();
       notify(d.id ? 'Alterações salvas' : this.kind() === 'transfer' ? 'Transferência registrada' : 'Lançamento salvo');
+      if (d.id && this.kind() !== 'transfer' && this.f.category_id && this.f.category_id !== d.category_id)
+        void this.store.offerSameDesc({ id: d.id, description: this.f.description }, this.f.category_id);
       if (another) {
         // mantém tipo, conta e data; limpa o resto (como "salvar e incluir outro" do Meu Dinheiro)
         Object.assign(this.f, { cents: 0, description: '', category_id: '', repeat: 'none', tags: '', notes: '' });

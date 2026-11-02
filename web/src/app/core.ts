@@ -175,6 +175,23 @@ export class Store {
   }
 
   /** Alteração com "Desfazer": guarda as linhas antes, aplica, oferece restaurar. */
+  /** Trocou a categoria? Oferece aplicar aos outros com a mesma descrição. Vira "regra" de graça: o lançamento
+   *  automático (notificação/Open Finance) já usa a última categoria daquela descrição. */
+  async offerSameDesc(t: { id: string; description: string }, category_id: string | null) {
+    const cat = this.catById().get(category_id ?? '');
+    if (!cat || !t.description.trim()) return;
+    const desc = t.description.trim();
+    // prefixo + comparação sem espaços nas pontas (o import do Organizze traz "Bilhete " com espaço)
+    let q = sb.from('transactions').select('id, description').ilike('description', desc.replace(/[%_\\]/g, '\\$&') + '%')
+      .neq('id', t.id).or(`category_id.is.null,category_id.neq.${cat.id}`).is('transfer_id', null).is('pays_card_id', null);
+    q = cat.kind === 'income' ? q.gt('amount', 0) : q.lt('amount', 0);
+    const ids = ((await q).data ?? []).filter((r) => r.description.trim().toLowerCase() === desc.toLowerCase()).map((r) => r.id as string);
+    if (!ids.length) return;
+    notify(`Aplicar ${cat.name} a ${ids.length === 1 ? 'outro' : `outros ${ids.length}`} "${desc}"?`, { action: { label: 'Aplicar', run: () =>
+      this.withUndo(`${ids.length} em ${cat.name}`, { column: 'id', value: ids },
+        () => must(sb.from('transactions').update({ category_id: cat.id, reviewed: true }).in('id', ids))) } });
+  }
+
   async withUndo(text: string, ids: { column: 'id' | 'transfer_id' | 'group_id'; value: string | string[]; fromDate?: string },
                  apply: () => PromiseLike<unknown>) {
     let q = sb.from('transactions').select('*');

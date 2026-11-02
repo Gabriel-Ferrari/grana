@@ -251,6 +251,7 @@ export class Home {
   async setCat(t: Tx, category_id: string) {
     this.review.update((l) => l.map((x) => (x.id === t.id ? { ...x, category_id: category_id || null } : x)));
     await must(sb.from('transactions').update({ category_id: category_id || null }).eq('id', t.id));
+    void this.store.offerSameDesc(t, category_id);
   }
 
   async approve(t: Tx) {

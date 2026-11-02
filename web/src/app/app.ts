@@ -131,7 +131,7 @@ const NAV = [
       <div class="toast" [class.error]="t.tone === 'error'" role="status">
         <g-icon [name]="t.tone === 'error' ? 'error' : 'check_circle'" [fill]="true" />
         <span>{{ t.text }}</span>
-        @if (t.action; as a) { <button (click)="a.run(); toast.set(null)"><g-icon name="undo" [size]="16" /> {{ a.label }}</button> }
+        @if (t.action; as a) { <button (click)="a.run(); toast.set(null)">@if (a.label === 'Desfazer') {<g-icon name="undo" [size]="16" /> }{{ a.label }}</button> }
       </div>
     }
   `,
