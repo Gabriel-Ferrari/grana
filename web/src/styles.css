@@ -3231,3 +3231,44 @@ body:has(.sel-bar) .toast {
         padding-bottom: calc(1.4rem + env(safe-area-inset-bottom));
     }
 }
+
+/* data: input nativo invisível (só para abrir o picker do sistema no celular) */
+.date-field {
+    position: relative;
+}
+.native-date {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+    border: 0;
+    padding: 0;
+}
+.cal-scrim {
+    display: none;
+}
+/* celular sem picker nativo: nosso calendário como modal por cima */
+@media (max-width: 860px) {
+    .cal-scrim {
+        display: block;
+        position: fixed;
+        inset: 0;
+        z-index: 70;
+        background: oklch(15% 0.02 160 / 0.45);
+        animation: fade 0.2s var(--ease);
+    }
+    .cal {
+        position: fixed;
+        z-index: 71;
+        left: 1rem;
+        right: 1rem;
+        top: 50%;
+        margin: 0;
+        translate: 0 -50%;
+        max-width: 420px;
+        margin-inline: auto;
+    }
+}

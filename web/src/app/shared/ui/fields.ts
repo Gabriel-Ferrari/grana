@@ -105,8 +105,11 @@ const WEEK = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
                 <g-icon name="calendar_month" [size]="18" />{{ value() !== hoje && value() !== ontem ? long() : 'Outra data' }}
             </button>
         </div>
+        <!-- celular: calendário nativo do Android/iOS por cima (showPicker); o input fica invisível -->
+        <input #native class="native-date" type="date" [value]="value()" (change)="pickNative($event)" tabindex="-1" aria-hidden="true" />
         @if (open()) {
-            <div class="cal" role="dialog" aria-label="Escolher data">
+            <div class="cal-scrim" (click)="open.set(false)" (keydown.escape)="open.set(false)" tabindex="-1"></div>
+            <div class="cal" role="dialog" aria-modal="true" aria-label="Escolher data">
                 <div class="cal-head">
                     <button type="button" class="btn ghost icon" (click)="month.set(addMonths(month(), -1))" aria-label="Mês anterior">
                         <g-icon name="chevron_left" />
@@ -162,13 +165,27 @@ export class DatePick {
         return [...pad, ...Array.from({ length: n }, (_, i) => this.month().slice(0, 8) + String(i + 1).padStart(2, '0'))];
     });
 
+    native = viewChild.required<ElementRef<HTMLInputElement>>('native');
     toggle() {
         this.month.set(this.value().slice(0, 8) + '01');
+        // celular: picker do sistema em modal (padrão Organizze/Google); sem suporte, cai no nosso calendário em modal
+        if (!this.open() && matchMedia('(max-width: 860px)').matches) {
+            try {
+                this.native().nativeElement.showPicker();
+                return;
+            } catch {
+                /* navegador sem showPicker: segue para o calendário próprio */
+            }
+        }
         this.open.update((o) => !o);
     }
     pick(d: string) {
         this.value.set(d);
         this.open.set(false);
+    }
+    pickNative(e: Event) {
+        const v = (e.target as HTMLInputElement).value;
+        if (v) this.pick(v);
     }
     @HostListener('keydown.escape', ['$event'])
     esc(e: Event) {
