@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.angular/
+supabase/.temp/
+supabase/.branches/
+.env*
+backup*.sql
