@@ -43,6 +43,16 @@ export const brl = (cents: number, compact = false) =>
 /** Cor salva, ou a do banco (escolhido ou pelo nome) — contas/cartões importados vêm sem cor. */
 export const bankColor = (name: string, color?: string | null, institution?: string | null) => color || bankOf(name, institution)?.color || null;
 
+/** Tema: '' segue o sistema; 'light'/'dark' fixam. Gráficos escutam o evento 'grana-theme'. */
+export type Theme = '' | 'light' | 'dark';
+export const theme = signal<Theme>((localStorage.getItem('grana.theme') as Theme) || '');
+export function setTheme(t: Theme) {
+  theme.set(t);
+  localStorage.setItem('grana.theme', t);
+  document.documentElement.dataset['theme'] = t;
+  dispatchEvent(new Event('grana-theme'));
+}
+
 /** Ocultar valores (olho): lido pelo pipe brl. */
 export const hidden = signal(localStorage.getItem('grana.hidden') === '1');
 export function toggleHidden() {
@@ -80,7 +90,8 @@ export function notify(text: string, opts: { tone?: Toast['tone']; action?: Toas
 export function authError(msg: string): string {
   if (/invalid login credentials/i.test(msg)) return 'E-mail ou senha incorretos.';
   if (/email not confirmed/i.test(msg)) return 'Confirme seu e-mail antes de entrar.';
-  if (/signups? not allowed|signup is disabled/i.test(msg)) return 'Cadastro fechado: este app é de uso pessoal.';
+  if (/signups? not allowed|signup is disabled/i.test(msg)) return 'Cadastros estão fechados no momento.';
+  if (/already registered|already been registered|user already exists/i.test(msg)) return 'Este e-mail já tem conta. Use Entrar ou Esqueci minha senha.';
   if (/rate limit|too many/i.test(msg)) return 'Muitas tentativas. Espere um pouco e tente de novo.';
   if (/password should be at least|weak/i.test(msg)) return 'Senha fraca: use pelo menos 8 caracteres, com letras e números.';
   if (/same.*password|different from the old/i.test(msg)) return 'A nova senha precisa ser diferente da atual.';

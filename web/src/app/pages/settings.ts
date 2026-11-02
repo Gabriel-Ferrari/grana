@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { BANKS, Bank, BankLogo, NETWORKS, bankByPackage, bankOf, bankPackage, networkLogo } from '../banks';
 import { Store, authError, bankColor, catIcon, must, notify, sb, toCents } from '../core';
 import { CATEGORY_ICONS, Icon } from '../icon';
+import { OpenFinance } from '../openfinance';
 
 /** Nome do banco por pacote Android (usado na tela de notificações). */
 export const bankName = (pkg: string) => bankByPackage(pkg)?.name ?? pkg;
@@ -11,7 +12,7 @@ type Kind = 'accounts' | 'cards' | 'categories';
 type Row = Record<string, any>;
 
 @Component({
-  imports: [FormsModule, Icon, BankLogo],
+  imports: [FormsModule, Icon, BankLogo, OpenFinance],
   template: `
     <div class="page-title reveal"><h1>Ajustes</h1></div>
 
@@ -46,6 +47,8 @@ type Row = Record<string, any>;
       </section>
     </div>
 
+    <g-openfinance class="reveal" />
+
     <section class="panel reveal">
       <div class="panel-head"><h2>Categorias</h2><button class="btn" (click)="create('categories')"><g-icon name="add" [size]="18" />Categoria</button></div>
       <div class="grid-2">
@@ -73,7 +76,7 @@ type Row = Record<string, any>;
         <label style="min-width:200px">Repita <input name="p2" type="password" [(ngModel)]="pass2" required autocomplete="new-password" /></label>
         <button class="btn primary"><g-icon name="lock" [size]="18" />Definir senha</button>
       </form>
-      <p class="muted small" style="margin:.8rem 0 0">Mínimo de 8 caracteres. Novos cadastros estão fechados: só você entra.</p>
+      <p class="muted small" style="margin:.8rem 0 0">Mínimo de 8 caracteres. Cada conta vê só os próprios dados.</p>
     </section>
 
     @if (edit(); as e) {

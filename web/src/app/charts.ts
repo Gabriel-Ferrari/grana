@@ -65,8 +65,8 @@ function useChart(canvas: Signal<ElementRef<HTMLCanvasElement>>, build: (t: Retu
     chart = new Chart(canvas().nativeElement, build(theme()));
   };
   const mq = matchMedia('(prefers-color-scheme: dark)');
-  afterNextRender(() => { render(); mq.addEventListener('change', render); });
-  inject(DestroyRef).onDestroy(() => { mq.removeEventListener('change', render); chart?.destroy(); });
+  afterNextRender(() => { render(); mq.addEventListener('change', render); addEventListener('grana-theme', render); });
+  inject(DestroyRef).onDestroy(() => { mq.removeEventListener('change', render); removeEventListener('grana-theme', render); chart?.destroy(); });
   return {
     /** chamar dentro de effect() depois de ler os inputs: redesenha com os dados novos */
     update: () => {

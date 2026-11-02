@@ -81,15 +81,15 @@ import { BankLogo } from '../banks';
                   <div class="title">{{ t.description }}</div>
                   <div class="sub" [class.neg]="t.date < hoje">@if (t.date < hoje) {<g-icon name="warning" [size]="14" />atrasada · } vence {{ t.date | dmy: true }}</div>
                 </div>
-                <span class="amt">{{ -t.amount | brl }}</span>
-                <button class="paid-btn" (click)="pay(t)" title="Marcar como paga"><g-icon name="check" [size]="18" /></button>
+                <span class="amt neg">{{ -t.amount | brl }}</span>
+                <button class="paid-btn" (click)="pay(t)" title="Marcar como paga" aria-label="Marcar como paga"><g-icon name="thumb_up" [size]="18" /></button>
               </div>
             }
             @for (i of invoices(); track i.card_id + i.invoice_date) {
               <a class="item click" routerLink="/cartoes" [queryParams]="{ c: i.card_id }">
                 <span class="cat-ico" style="--cc: var(--brand)"><span class="ms">credit_card</span></span>
                 <div class="grow"><div class="title">Fatura {{ store.originName().get(i.card_id) }}</div><div class="sub">vence {{ i.invoice_date | dmy: true }}</div></div>
-                <span class="amt">{{ i.due | brl }}</span>
+                <span class="amt neg">{{ i.due | brl }}</span>
               </a>
             }
             @if (!bills().length && !invoices().length) {

@@ -1,6 +1,8 @@
-import { Component, ElementRef, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import { Component, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Store, Tx, addMonths, catIcon, must, notify, sb, toCents, today } from './core';
+import { Store, Tx, addMonths, brl, catIcon, must, notify, sb, today } from './core';
+import { DatePick, Keypad, Money } from './fields';
+import { BankLogo } from './banks';
 import { Icon } from './icon';
 
 export type TxKind = 'expense' | 'income' | 'transfer';
@@ -9,94 +11,102 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
 
 @Component({
   selector: 'tx-form',
-  imports: [FormsModule, Icon],
+  imports: [FormsModule, Icon, Money, DatePick, Keypad, BankLogo],
   template: `
     <div class="scrim" (click)="close.emit(null)"></div>
-    <form class="drawer" (ngSubmit)="save()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
-      <header>
-        @if (!draft().id) {
-          <div class="seg kind">
-            <button type="button" data-k="expense" [class.on]="kind() === 'expense'" (click)="setKind('expense')"><g-icon name="arrow_upward" [size]="17" />Despesa</button>
-            <button type="button" data-k="income" [class.on]="kind() === 'income'" (click)="setKind('income')"><g-icon name="arrow_downward" [size]="17" />Receita</button>
-            <button type="button" [class.on]="kind() === 'transfer'" (click)="setKind('transfer')"><g-icon name="swap_horiz" [size]="17" />Transf.</button>
-          </div>
-        } @else { <h2>{{ title() }}</h2> }
-        <button type="button" class="btn ghost icon" (click)="close.emit(null)" aria-label="Fechar"><g-icon name="close" /></button>
-      </header>
-
-      <div class="body">
-        <label>Valor
-          <input #amount class="amount-input" [class]="kind()" name="v" type="number" inputmode="decimal" step="0.01" min="0.01"
-                 [(ngModel)]="f.value" required placeholder="0,00" />
-        </label>
-
-        @if (kind() !== 'transfer') {
-          <label>Descrição
-            <input name="d" [(ngModel)]="f.description" (ngModelChange)="suggestSoon()" required placeholder="Ex.: Mercado, Uber, Salário" autocomplete="off" />
-          </label>
-          @if (hint(); as h) {
-            <button type="button" class="suggest" (click)="f.category_id = h.id; hint.set(null)">
-              <g-icon name="auto_awesome" />Usar categoria {{ h.name }}
+    <form class="drawer tx" [attr.data-kind]="kind()" (ngSubmit)="save()" role="dialog" aria-modal="true" [attr.aria-label]="title()">
+      <div class="tx-head">
+        <div class="row between">
+          @if (!draft().id) {
+            <div class="tx-tabs" role="tablist" aria-label="Tipo">
+              <button type="button" role="tab" [attr.aria-selected]="kind() === 'expense'" [class.on]="kind() === 'expense'" (click)="setKind('expense')">Despesa</button>
+              <button type="button" role="tab" [attr.aria-selected]="kind() === 'income'" [class.on]="kind() === 'income'" (click)="setKind('income')">Receita</button>
+              <button type="button" role="tab" [attr.aria-selected]="kind() === 'transfer'" [class.on]="kind() === 'transfer'" (click)="setKind('transfer')">Transferência</button>
+            </div>
+          } @else { <b class="tx-title">{{ title() }}</b> }
+          <button type="button" class="btn ghost icon on-k" (click)="close.emit(null)" aria-label="Fechar"><g-icon name="close" /></button>
+        </div>
+        <div class="tx-amount" (click)="mobile && openKeypad()">
+          <g-money [(cents)]="f.cents" inputId="valor" [keypad]="keypad()" />
+          @if (kind() !== 'transfer' && f.origin.startsWith('a:')) {
+            <button type="button" class="thumb" [class.on]="f.paid" (click)="$event.stopPropagation(); f.paid = !f.paid" [attr.aria-pressed]="f.paid"
+                    [title]="f.paid ? (kind() === 'income' ? 'Recebido' : 'Pago') : (kind() === 'income' ? 'A receber' : 'A pagar')">
+              <g-icon name="thumb_up" [size]="30" [fill]="f.paid" />
             </button>
           }
+        </div>
+        @if (kind() !== 'transfer' && f.origin.startsWith('a:')) {
+          <small class="tx-paid">{{ f.paid ? (kind() === 'income' ? 'Recebido' : 'Pago') : (kind() === 'income' ? 'A receber' : 'A pagar') }}</small>
+        }
+        @if (f.repeat === 'parcelado' && f.cents) { <small class="tx-paid">{{ f.times }}× de {{ fmt(f.cents / f.times) }}</small> }
+      </div>
+
+      @if (keypad()) {
+        <g-keypad (key)="$event < 0 ? money()?.back() : money()?.press($event)" (done)="keypad.set(false)" />
+      } @else {
+      <div class="body tx-body">
+        @if (kind() !== 'transfer') {
+          <label class="tx-row"><span class="lbl">Descrição</span>
+            <span class="tx-val"><g-icon name="edit" class="muted" /><input name="d" [(ngModel)]="f.description" (ngModelChange)="suggestSoon()" required placeholder="Adicione a descrição" autocomplete="off" /></span>
+          </label>
+          @if (hint(); as h) {
+            <button type="button" class="suggest" (click)="f.category_id = h.id; hint.set(null)"><g-icon name="auto_awesome" />Usar categoria {{ h.name }}</button>
+          }
+          <label class="tx-row"><span class="lbl">Categoria</span>
+            <span class="tx-val"><span class="cat-ico round" [style.--cc]="catColor()"><span class="ms">{{ catIconName() }}</span></span>
+              <select name="c" [(ngModel)]="f.category_id">
+                <option value="">Sem categoria</option>
+                @for (c of cats(); track c.id) { <option [value]="c.id">{{ c.parent_id ? '— ' : '' }}{{ c.name }}</option> }
+              </select></span>
+          </label>
+          <label class="tx-row"><span class="lbl">{{ kind() === 'income' ? 'Recebido em' : 'Pago com' }}</span>
+            <span class="tx-val"><g-bank [name]="originName()" [institution]="originInstitution()" [size]="38" [fallback]="f.origin.startsWith('c:') ? 'credit_card' : 'account_balance'" />
+              <select name="o" [(ngModel)]="f.origin" required>
+                <optgroup label="Contas">@for (a of accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }</optgroup>
+                <optgroup label="Cartões de crédito">@for (c of cards(); track c.id) { <option [value]="'c:' + c.id">{{ c.name }}</option> }</optgroup>
+              </select></span>
+          </label>
+        } @else {
+          <label class="tx-row"><span class="lbl">Saiu de</span>
+            <span class="tx-val"><g-bank [name]="originName()" [size]="38" /><select name="o" [(ngModel)]="f.origin" required>
+              @for (a of accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }
+            </select></span>
+          </label>
+          <label class="tx-row"><span class="lbl">Entrou em</span>
+            <span class="tx-val"><g-bank [name]="toName()" [size]="38" /><select name="to" [(ngModel)]="f.to" required>
+              <option value="" disabled>Escolha a conta</option>
+              @for (a of accounts(); track a.id) { <option [value]="a.id">{{ a.name }}</option> }
+            </select></span>
+          </label>
         }
 
-        <div class="row end">
-          <label>Data <input name="dt" type="date" [(ngModel)]="f.date" required /></label>
-          <div class="seg" style="align-self:flex-end">
-            <button type="button" [class.on]="f.date === hoje" (click)="f.date = hoje">Hoje</button>
-            <button type="button" [class.on]="f.date === ontem" (click)="f.date = ontem">Ontem</button>
-          </div>
-        </div>
+        <div class="tx-row"><span class="lbl">Data</span><g-date [(value)]="f.date" /></div>
 
-        @if (kind() === 'transfer') {
-          <div class="row">
-            <label>De <select name="o" [(ngModel)]="f.origin" required>
-              @for (a of accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }
-            </select></label>
-            <label>Para <select name="to" [(ngModel)]="f.to" required>
-              <option value="" disabled>Escolha</option>
-              @for (a of accounts(); track a.id) { <option [value]="a.id">{{ a.name }}</option> }
-            </select></label>
-          </div>
-        } @else {
-          <label>Conta ou cartão <select name="o" [(ngModel)]="f.origin" required>
-            <optgroup label="Contas">@for (a of accounts(); track a.id) { <option [value]="'a:' + a.id">{{ a.name }}</option> }</optgroup>
-            <optgroup label="Cartões de crédito">@for (c of cards(); track c.id) { <option [value]="'c:' + c.id">{{ c.name }}</option> }</optgroup>
-          </select></label>
-          <div class="row end">
-            <span class="cat-ico" [style.--cc]="catColor()"><span class="ms">{{ catIconName() }}</span></span>
-            <label>Categoria <select name="c" [(ngModel)]="f.category_id">
-              <option value="">Sem categoria</option>
-              @for (c of cats(); track c.id) { <option [value]="c.id">{{ c.parent_id ? '— ' : '' }}{{ c.name }}</option> }
-            </select></label>
-          </div>
-          @if (f.origin.startsWith('a:')) {
-            <label class="check"><input name="p" type="checkbox" [(ngModel)]="f.paid" /> {{ kind() === 'income' ? 'Já recebi' : 'Já paguei' }}</label>
+        @if (kind() !== 'transfer') {
+          @if (!draft().id) {
+            <div class="tx-row"><span class="lbl">Repetir lançamento</span>
+              <div class="row wrap">
+                <button type="button" class="pill" [class.on]="f.repeat === 'fixo'" (click)="f.repeat = f.repeat === 'fixo' ? 'none' : 'fixo'"><g-icon name="repeat" [size]="18" />Fixo</button>
+                <button type="button" class="pill" [class.on]="f.repeat === 'parcelado'" (click)="f.repeat = f.repeat === 'parcelado' ? 'none' : 'parcelado'"><g-icon name="credit_card" [size]="18" />Parcelado</button>
+                @if (f.repeat === 'parcelado') {
+                  <span class="row" style="gap:.4rem"><input name="n" type="number" inputmode="numeric" min="2" max="72" [(ngModel)]="f.times" style="width:5.5rem" aria-label="Parcelas" />vezes</span>
+                }
+              </div>
+              @if (f.repeat === 'fixo') { <small class="muted">Repete todo mês pelos próximos 12 meses.</small> }
+            </div>
           }
-
-          <button type="button" class="btn ghost more-toggle" (click)="more.set(!more())">
-            <g-icon name="tune" [size]="18" />{{ more() ? 'Menos opções' : 'Parcelar, repetir, tags…' }}
+          <button type="button" class="btn ghost more-toggle" (click)="more.set(!more())" [attr.aria-expanded]="more()">
+            {{ more() ? 'Menos opções' : 'Mais opções' }}<g-icon [name]="more() ? 'chevron_left' : 'expand_more'" [size]="20" />
           </button>
           <div class="more-fields" [class.open]="more()">
             <div>
-              @if (!draft().id) {
-                <div class="row">
-                  <label>Repetir <select name="r" [(ngModel)]="f.repeat">
-                    <option value="none">Não repetir</option>
-                    <option value="parcelado">Parcelado</option>
-                    <option value="fixo">Fixo (todo mês, 12 meses)</option>
-                  </select></label>
-                  @if (f.repeat === 'parcelado') { <label>Parcelas <input name="n" type="number" min="2" max="72" [(ngModel)]="f.times" /></label> }
-                </div>
-                @if (f.repeat === 'parcelado' && f.value) { <small class="muted">{{ f.times }}× de R$ {{ (f.value / f.times).toFixed(2).replace('.', ',') }} — o valor acima é o total</small> }
-              }
-              <label>Tags <input name="t" [(ngModel)]="f.tags" placeholder="viagem, presente…" /></label>
-              <label>Observação <textarea name="obs" rows="2" [(ngModel)]="f.notes"></textarea></label>
+              <label class="tx-row"><span class="lbl">Tags</span><span class="tx-val"><g-icon name="sell" class="muted" /><input name="t" [(ngModel)]="f.tags" placeholder="viagem, presente…" /></span></label>
+              <label class="tx-row"><span class="lbl">Observação</span><textarea name="obs" rows="2" [(ngModel)]="f.notes"></textarea></label>
             </div>
           </div>
         }
       </div>
+      }
 
       <footer>
         <div class="row">
@@ -105,7 +115,11 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             @if (draft().group_id) { <button type="button" class="btn ghost danger" (click)="remove(true)">e próximos</button> }
           }
         </div>
-        <button class="btn primary" [disabled]="busy()"><g-icon name="check" [size]="18" />Salvar</button>
+        @if (keypad()) {
+          <button type="button" class="btn save" (click)="keypad.set(false)" [disabled]="!f.cents">Continuar<g-icon name="chevron_right" [size]="20" /></button>
+        } @else {
+          <button class="btn save" [disabled]="busy() || !f.cents"><g-icon name="check" [size]="22" />Salvar</button>
+        }
       </footer>
     </form>
   `,
@@ -117,15 +131,17 @@ export class TxForm implements OnInit {
   close = output<string | null>();
   busy = signal(false);
   more = signal(false);
+  /** celular: começa pelo teclado numérico (como no Organizze) */
+  mobile = matchMedia('(max-width: 860px)').matches;
+  keypad = signal(false);
   kind = signal<TxKind>('expense');
   hint = signal<{ id: string; name: string } | null>(null);
-  amount = viewChild<ElementRef<HTMLInputElement>>('amount');
-  hoje = today();
-  ontem = new Date(Date.parse(today() + 'T12:00:00') - 864e5).toISOString().slice(0, 10);
+  money = viewChild(Money);
+  fmt = (c: number) => brl(Math.round(c));
   private timer?: ReturnType<typeof setTimeout>;
 
   f = {
-    description: '', value: null as number | null, date: today(), paid: true,
+    description: '', cents: 0, date: today(), paid: true,
     origin: '', to: '', category_id: '', repeat: 'none' as 'none' | 'parcelado' | 'fixo', times: 2, tags: '', notes: '',
   };
 
@@ -134,7 +150,7 @@ export class TxForm implements OnInit {
   title = computed(() => (this.draft().id ? 'Editar ' : 'Nova ') + ({ expense: 'despesa', income: 'receita', transfer: 'transferência' })[this.kind()]);
 
   constructor() {
-    afterNextRender(() => this.amount()?.nativeElement.focus());
+    afterNextRender(() => { if (!this.mobile) this.money()?.focus(); });
   }
 
   // métodos (não computed): dependem de campos do formulário, que não são signals
@@ -143,6 +159,13 @@ export class TxForm implements OnInit {
     const all = this.store.categories().filter((c) => c.kind === k && !c.archived);
     return all.filter((c) => !c.parent_id).flatMap((p) => [p, ...all.filter((c) => c.parent_id === p.id)]);
   }
+  originName() { const [, id] = this.f.origin.split(':'); return this.store.originName().get(id) ?? ''; }
+  originInstitution() {
+    const [t, id] = this.f.origin.split(':');
+    return (t === 'c' ? this.store.cards().find((c) => c.id === id)?.institution : this.store.accounts().find((a) => a.id === id)?.institution) ?? null;
+  }
+  toName() { return this.store.originName().get(this.f.to) ?? ''; }
+  openKeypad() { this.keypad.set(true); }
   catColor() { return this.store.catById().get(this.f.category_id)?.color ?? 'var(--muted)'; }
   catIconName() { return this.f.category_id ? catIcon(this.store.catById().get(this.f.category_id)) : 'category'; }
 
@@ -151,7 +174,7 @@ export class TxForm implements OnInit {
     this.kind.set(d.kind ?? (d.transfer_id ? 'transfer' : (d.amount ?? -1) > 0 ? 'income' : 'expense'));
     Object.assign(this.f, {
       description: d.description ?? '',
-      value: d.amount ? Math.abs(d.amount) / 100 : null,
+      cents: d.amount ? Math.abs(d.amount) : 0,
       date: d.date ?? today(),
       paid: d.paid ?? true,
       origin: d.card_id ? 'c:' + d.card_id : d.account_id ? 'a:' + d.account_id : this.accounts()[0] ? 'a:' + this.accounts()[0].id : '',
@@ -160,6 +183,7 @@ export class TxForm implements OnInit {
       notes: d.notes ?? '',
     });
     this.more.set(!!(d.tags?.length || d.notes));
+    this.keypad.set(this.mobile && !d.id && !d.amount);
     if (!d.id && d.description) this.suggestSoon();
   }
 
@@ -188,7 +212,7 @@ export class TxForm implements OnInit {
   }
 
   async save() {
-    const total = toCents(this.f.value ?? 0);
+    const total = this.f.cents;
     if (total <= 0 || !this.f.origin) return;
     this.busy.set(true);
     try {

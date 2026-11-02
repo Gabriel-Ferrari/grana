@@ -1,9 +1,10 @@
-import { Component, HostListener, inject } from '@angular/core';
+import { Component, HostListener, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-import { Store, authError, hidden, notify, sb, toast, toggleHidden } from './core';
+import { Store, Theme, authError, hidden, notify, sb, setTheme, theme, toast, toggleHidden } from './core';
 import { Icon } from './icon';
 import { TxForm } from './tx-form';
+import { pluggySync } from './openfinance';
 
 const NAV = [
   { to: '/', label: 'Início', icon: 'home', exact: true },
@@ -19,8 +20,10 @@ const NAV = [
   selector: 'app-root',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, FormsModule, Icon, TxForm],
   template: `
+    @if (splash()) {
+      <div class="boot" [class.out]="store.ready()" aria-label="Carregando grana"><img src="/icon.svg" alt="" /><b>grana</b><i></i></div>
+    }
     @if (!store.ready()) {
-      <div style="min-height:100dvh;display:grid;place-items:center"><img src="/icon.svg" width="56" height="56" alt="" style="animation:pop 1s var(--ease) infinite alternate;border-radius:16px" /></div>
     } @else if (!store.session()) {
       <div class="login">
         <section class="login-art">
@@ -34,23 +37,26 @@ const NAV = [
           <p class="muted">Lê as notificações do banco e lança sozinho. Cartões, faturas, limites e relatórios num lugar só.</p>
         </section>
         <section class="login-form">
-          <h2>Entrar</h2>
-          <p class="muted">Use sua conta Google. Só você tem acesso aos seus dados.</p>
+          <h2>{{ signup ? 'Criar conta' : 'Entrar' }}</h2>
+          <p class="muted">Cada conta vê só os próprios dados.</p>
           <button class="google-btn" (click)="google()">
             <svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>
             Continuar com Google
           </button>
           <div class="or"><span>ou com e-mail</span></div>
-          <form (ngSubmit)="passwordLogin()" class="col" style="gap:.75rem">
+          <form (ngSubmit)="signup ? createAccount() : passwordLogin()" class="col" style="gap:.75rem">
+            @if (signup) { <label>Seu nome <input name="nm" [(ngModel)]="name" required autocomplete="name" /></label> }
             <label>E-mail <input name="e" type="email" [(ngModel)]="email" required autocomplete="username" inputmode="email" /></label>
             <div class="pw">
-              <label>Senha <input name="p" [type]="showPass ? 'text' : 'password'" [(ngModel)]="pass" required autocomplete="current-password" minlength="6" /></label>
+              <label>Senha <input name="p" [type]="showPass ? 'text' : 'password'" [(ngModel)]="pass" required [attr.autocomplete]="signup ? 'new-password' : 'current-password'" [attr.minlength]="signup ? 8 : 6" /></label>
               <button type="button" class="btn ghost icon" (click)="showPass = !showPass" [attr.aria-label]="showPass ? 'Esconder senha' : 'Mostrar senha'"><g-icon [name]="showPass ? 'visibility_off' : 'visibility'" [size]="18" /></button>
             </div>
-            <button class="btn primary" style="padding:.8rem" [disabled]="busy"><g-icon name="login" [size]="18" />Entrar</button>
-            <button type="button" class="btn ghost" (click)="forgot()" style="align-self:flex-start;font-size:.85rem">Esqueci minha senha</button>
+            @if (signup) { <small class="muted">Mínimo de 8 caracteres.</small> }
+            <button class="btn primary" style="padding:.8rem" [disabled]="busy"><g-icon [name]="signup ? 'person_add' : 'login'" [size]="18" />{{ signup ? 'Criar conta' : 'Entrar' }}</button>
+            @if (!signup) { <button type="button" class="btn ghost" (click)="forgot()" style="align-self:flex-start;font-size:.85rem">Esqueci minha senha</button> }
           </form>
-          <p class="muted small">Primeira vez? Entre com o Google e defina uma senha em Ajustes → Segurança.</p>
+          <p class="muted small">{{ signup ? 'Já tem conta?' : 'Não tem conta?' }}
+            <button type="button" class="btn ghost" style="padding:.2rem .4rem;font-size:.85rem;color:var(--brand)" (click)="signup = !signup">{{ signup ? 'Entrar' : 'Criar conta com e-mail' }}</button></p>
         </section>
       </div>
     } @else {
@@ -68,6 +74,9 @@ const NAV = [
           <button class="btn ghost icon" (click)="toggleHidden()" [attr.aria-label]="hidden() ? 'Mostrar valores' : 'Ocultar valores'" title="Ocultar valores (H)">
             <g-icon [name]="hidden() ? 'visibility_off' : 'visibility'" />
           </button>
+          <button class="btn ghost icon" (click)="cycleTheme()" [attr.aria-label]="'Tema: ' + themeLabel()" [title]="'Tema: ' + themeLabel()">
+            <g-icon [name]="theme() === 'dark' ? 'dark_mode' : theme() === 'light' ? 'light_mode' : 'brightness_auto'" />
+          </button>
           <button class="btn primary hide-m" (click)="store.open({ kind: 'expense' })" title="Novo lançamento (D, R ou T)"><g-icon name="add" />Novo</button>
           <button class="btn ghost icon" popovertarget="user-menu" aria-label="Conta">
             @if (store.avatar(); as a) { <img class="avatar" [src]="a" alt="" referrerpolicy="no-referrer" /> } @else { <g-icon name="more_horiz" /> }
@@ -76,6 +85,11 @@ const NAV = [
       </header>
       <div id="user-menu" popover class="more-menu" style="inset:4rem 1rem auto auto">
         <div class="muted small" style="padding:.5rem .8rem">{{ store.session()?.user?.email }}</div>
+        <div class="seg" style="margin:.2rem .6rem .6rem;display:flex" role="radiogroup" aria-label="Tema">
+          @for (o of themes; track o.v) {
+            <button style="flex:1" role="radio" [attr.aria-checked]="theme() === o.v" [class.on]="theme() === o.v" (click)="setTheme(o.v)"><g-icon [name]="o.icon" [size]="17" />{{ o.label }}</button>
+          }
+        </div>
         <div class="kbd-hint" style="padding:.2rem .8rem .6rem"><kbd>D</kbd><kbd>R</kbd><kbd>T</kbd> novo · <kbd>H</kbd> ocultar · <kbd>/</kbd> buscar</div>
         <button (click)="logout()"><g-icon name="logout" />Sair</button>
       </div>
@@ -127,10 +141,22 @@ export class App {
   nav = NAV;
   toast = toast;
   hidden = hidden;
+  theme = theme;
+  setTheme = setTheme;
+  themes: { v: Theme; label: string; icon: string }[] = [
+    { v: '', label: 'Sistema', icon: 'brightness_auto' }, { v: 'light', label: 'Claro', icon: 'light_mode' }, { v: 'dark', label: 'Escuro', icon: 'dark_mode' },
+  ];
+  themeLabel = () => this.themes.find((t) => t.v === theme())!.label;
+  cycleTheme() {
+    const order: Theme[] = ['', 'light', 'dark'];
+    setTheme(order[(order.indexOf(theme()) + 1) % 3]);
+  }
   toggleHidden = toggleHidden;
   email = '';
   pass = '';
   showPass = false;
+  signup = false;
+  name = '';
   busy = false;
   newPass = '';
   newPass2 = '';
@@ -143,6 +169,16 @@ export class App {
     const { error } = await sb.auth.signInWithPassword({ email: this.email.trim(), password: this.pass });
     this.busy = false;
     if (error) notify(authError(error.message), { tone: 'error' });
+  }
+  async createAccount() {
+    if (this.pass.length < 8) return notify('Use pelo menos 8 caracteres na senha.', { tone: 'error' });
+    this.busy = true;
+    const { data, error } = await sb.auth.signUp({ email: this.email.trim(), password: this.pass, options: { data: { full_name: this.name.trim() } } });
+    this.busy = false;
+    if (error) return notify(authError(error.message), { tone: 'error' });
+    // com confirmação de e-mail desligada a sessão já vem; senão, avisa para confirmar
+    if (!data.session) notify('Conta criada. Confirme pelo link enviado ao seu e-mail.');
+    else notify(`Bem-vindo, ${this.name.trim().split(' ')[0] || 'à grana'}!`);
   }
   async forgot() {
     if (!this.email.includes('@')) return notify('Digite seu e-mail primeiro.', { tone: 'error' });
@@ -172,6 +208,20 @@ export class App {
     const f = this.store.form();
     this.store.form.set(null);
     f?.done?.(id);
+  }
+
+  private synced = false;
+  /** splash do index.html continua até a sessão carregar, depois sai com fade */
+  splash = signal(true);
+  constructor() {
+    effect(() => { if (this.store.ready()) setTimeout(() => this.splash.set(false), 500); });
+    effect(async () => {
+      if (!this.store.session() || this.synced) return;
+      this.synced = true;
+      const { data } = await sb.from('pluggy_items').select('last_sync_at');
+      const stale = (data ?? []).some((i) => !i.last_sync_at || Date.now() - Date.parse(i.last_sync_at) > 12 * 3600e3);
+      if (stale && (await pluggySync())) await this.store.load();
+    });
   }
 
   /** Atalhos: D despesa, R receita, T transferência, H ocultar valores, / buscar. */

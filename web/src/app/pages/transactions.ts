@@ -47,6 +47,7 @@ import { Icon } from '../icon';
                   @if (t.installments) { <span class="tag">{{ t.installment }}/{{ t.installments }}</span> }
                   @if (t.recurring) { <span class="tag"><g-icon name="repeat" [size]="13" />fixo</span> }
                   @if (t.source === 'notification') { <span class="tag auto"><g-icon name="notifications" [size]="13" />auto</span> }
+                  @if (t.source === 'openfinance') { <span class="tag auto"><g-icon name="account_balance" [size]="13" />banco</span> }
                   @for (tag of t.tags; track tag) { <span class="tag"><g-icon name="sell" [size]="13" />{{ tag }}</span> }
                 </div>
                 <div class="sub">
@@ -54,11 +55,11 @@ import { Icon } from '../icon';
                   · <g-icon [name]="t.card_id ? 'credit_card' : 'account_balance'" [size]="14" />{{ store.originName().get(t.account_id ?? t.card_id ?? '') }}
                 </div>
               </div>
-              <span class="amt" [class.pos]="t.amount > 0">{{ t.amount | brl }}</span>
+              <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0 && !t.transfer_id">{{ t.amount | brl }}</span>
               @if (t.account_id) {
                 <button class="paid-btn" [class.on]="t.paid" (click)="$event.stopPropagation(); togglePaid(t)"
                         [attr.aria-label]="t.paid ? 'Pago — marcar como pendente' : 'Pendente — marcar como pago'" [title]="t.paid ? 'Pago' : 'Pendente'">
-                  <g-icon name="check" [size]="18" />
+                  <g-icon name="thumb_up" [size]="18" [fill]="t.paid" />
                 </button>
               } @else { <span style="width:30px;flex:none"></span> }
             </div>
@@ -72,7 +73,7 @@ import { Icon } from '../icon';
       }
       <div class="totals">
         <span>Entradas <b class="pos">{{ totals().inc | brl }}</b></span>
-        <span>Saídas <b>{{ -totals().exp | brl }}</b></span>
+        <span>Saídas <b class="neg">{{ -totals().exp | brl }}</b></span>
         <span>Resultado <b [class.neg]="totals().inc + totals().exp < 0">{{ totals().inc + totals().exp | brl }}</b></span>
       </div>
     </section>

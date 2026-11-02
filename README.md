@@ -104,14 +104,6 @@ SUPABASE_SERVICE_ROLE_KEY=... GRANA_EMAIL=seu@gmail.com node scripts/import-orga
 | Firebase | Firestore 1 GB + Auth | login Google trivial | NoSQL ruim p/ relatórios; Functions exigem plano Blaze (cartão) |
 | MongoDB Atlas M0 | 512 MB | — | só banco, NoSQL |
 
-## Conexão direta com bancos (Bradesco, Sicoob, Caixa, Nubank)
-- **Direto com o banco: inviável.** Open Finance Brasil só libera dados para instituições autorizadas pelo Banco Central;
-  pessoa física não se cadastra. APIs internas dos apps exigem vínculo de aparelho/token/2FA, violam os termos e quebram
-  sem aviso (a lib não oficial do Nubank, pynubank, parou de funcionar).
-- **Via agregador: viável e grátis para uso pessoal** com **Meu Pluggy** (meu.pluggy.ai): você conecta seus bancos por
-  Open Finance (os 4 participam), cria uma aplicação de desenvolvimento no dashboard da Pluggy (o trial de 15 dias é só
-  para configurar; os dados continuam vindo depois) e puxa as transações pela API com client_id/secret. Atualiza 1×/dia;
-  consentimento dura até 12 meses. O Organizze faz o mesmo com a Belvo (paga).
-- Implementação sugerida (não feita ainda): Edge Function agendada (pg_cron) que busca `/transactions` da Pluggy e faz
-  upsert com `ext_id = 'pluggy:<id>'` e `source = 'openfinance'`, conciliando com os lançamentos vindos de notificação
-  (mesmo valor ± 1 dia na mesma conta). Notificação = tempo real; Open Finance = conferência diária.
+## Conexão com bancos (Open Finance)
+Direto com o banco não dá (só instituições autorizadas pelo Banco Central). Via **Pluggy/MeuPluggy** dá, grátis para
+uso pessoal: veja o passo a passo em [`docs/pluggy.md`](docs/pluggy.md). No app: *Ajustes → Bancos conectados*.

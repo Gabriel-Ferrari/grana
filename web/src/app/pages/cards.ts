@@ -77,7 +77,7 @@ type Inv = Invoice & { due: number };
                 <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"><span class="ms">{{ icon(t) }}</span></span>
                 <div class="grow"><div class="title">{{ t.description }} @if (t.installments) {<span class="tag">{{ t.installment }}/{{ t.installments }}</span>}</div>
                   <div class="sub">{{ t.date | dmy: true }} · {{ store.catById().get(t.category_id ?? '')?.name ?? 'Sem categoria' }}</div></div>
-                <span class="amt" [class.pos]="t.amount > 0">{{ t.amount | brl }}</span>
+                <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0">{{ t.amount | brl }}</span>
               </div>
             } @empty { <div class="empty-state"><g-icon name="receipt_long" /><div><b>Fatura vazia</b>Compras feitas até o dia {{ c.closing_day }} entram aqui.</div></div> }
           </div>
