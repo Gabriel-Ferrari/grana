@@ -1,6 +1,6 @@
 # grana
 
-App pessoal de finanças no estilo Organizze, com infraestrutura **100% gratuita**. Contas, cartões e faturas,
+App pessoal de finanças com infraestrutura **100% gratuita**. Contas, cartões e faturas,
 categorias, limites, relatórios e balanço — com lançamentos automáticos a partir das **notificações dos bancos**
 no Android e importação via **Open Finance** (MeuPluggy).
 
@@ -31,8 +31,8 @@ no Android e importação via **Open Finance** (MeuPluggy).
   atrasados, 50/30/20.
 - **Lançamentos**: despesa, receita, transferência, parcelas e fixos; teclado com calculadora; filtros, busca,
   seleção em lote, arrastar para marcar pago/excluir, desfazer; sugestão de descrição e categoria.
-- **Cartões**: limite disponível, faturas por mês com crédito/saldo anterior, **Pagar fatura** como no Organizze (folha
-  com valor, conta, data e anexo), **Novo cartão** / **Editar cartão** na própria tela.
+- **Cartões**: limite disponível, faturas por mês com crédito/saldo anterior, **Pagar fatura** (folha com valor,
+  conta, data e anexo), **Novo cartão** / **Editar cartão** na própria tela.
 - **Relatórios** (categorias, balanço, tags, recorrentes), **Balanço** diário e **Limites** por categoria. No celular,
   tocar no gráfico mostra a categoria e o valor (a rosca mostra no centro); no desktop, clicar abre os lançamentos.
 - **Revisar**: fila dos lançamentos que chegaram sozinhos (notificação/Open Finance).
@@ -61,7 +61,6 @@ Angular (Cloudflare Workers) ── supabase-js + login Google ─────�
 | `web/` | app Angular (estrutura abaixo) |
 | `android/` | app Android "grana": app web em tela cheia (TWA/Chrome) + coletor de notificações (Kotlin) |
 | `scripts/import-organizze.mjs` | migra seus dados do Organizze (API v2), idempotente |
-| `docs/engenharia-reversa.md` | o que foi descoberto sobre o Organizze |
 
 ### `web/src/app` — por domínio
 ```
