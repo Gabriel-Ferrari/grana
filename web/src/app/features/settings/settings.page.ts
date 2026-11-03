@@ -1,4 +1,5 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { BANKS, Bank, BankLogo, CardArt, NETWORKS, bankOf, bankPackage, networkLogo, bankName, bankColor } from '../../shared/banks';
 import {
@@ -7,6 +8,7 @@ import {
     catIcon,
     must,
     notify,
+    ask,
     sb,
     toCents,
     today,
@@ -19,7 +21,7 @@ import {
     disablePush,
 } from '../../core';
 import { CATEGORY_ICONS, Icon } from '../../shared/ui/icon';
-import { OpenFinance } from '../banks/open-finance';
+import { OpenFinance, offerBank } from '../banks/open-finance';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList, moveItemInArray } from '@angular/cdk/drag-drop';
 
 type Kind = 'accounts' | 'cards' | 'categories';
@@ -41,7 +43,6 @@ type Row = Record<string, any>;
                     class="list reorder-list"
                     cdkDropList
                     cdkDropListLockAxis="y"
-                    [cdkDropListDisabled]="!store.v3()"
                     (cdkDropListDropped)="drop('accounts', rows().accounts, $event)"
                 >
                     @for (a of rows().accounts; track a['id']; let i = $index) {
@@ -70,45 +71,41 @@ type Row = Record<string, any>;
                                     }
                                 </div>
                             </div>
-                            @if (store.v3()) {
-                                <span
-                                    class="order-btns"
-                                    (click)="$event.stopPropagation()"
-                                    (keydown.enter)="$event.stopPropagation()"
-                                    tabindex="-1"
+                            <span
+                                class="order-btns"
+                                (click)="$event.stopPropagation()"
+                                (keydown.enter)="$event.stopPropagation()"
+                                tabindex="-1"
+                            >
+                                <button
+                                    class="btn ghost icon"
+                                    (click)="move('accounts', rows().accounts, i, -1)"
+                                    [disabled]="i === 0"
+                                    aria-label="Subir"
+                                    title="Subir"
                                 >
-                                    <button
-                                        class="btn ghost icon"
-                                        (click)="move('accounts', rows().accounts, i, -1)"
-                                        [disabled]="i === 0"
-                                        aria-label="Subir"
-                                        title="Subir"
-                                    >
-                                        <g-icon name="arrow_upward" [size]="16" />
-                                    </button>
-                                    <button
-                                        class="btn ghost icon"
-                                        (click)="move('accounts', rows().accounts, i, 1)"
-                                        [disabled]="i === rows().accounts.length - 1"
-                                        aria-label="Descer"
-                                        title="Descer"
-                                    >
-                                        <g-icon name="arrow_downward" [size]="16" />
-                                    </button>
-                                </span>
-                            }
+                                    <g-icon name="arrow_upward" [size]="16" />
+                                </button>
+                                <button
+                                    class="btn ghost icon"
+                                    (click)="move('accounts', rows().accounts, i, 1)"
+                                    [disabled]="i === rows().accounts.length - 1"
+                                    aria-label="Descer"
+                                    title="Descer"
+                                >
+                                    <g-icon name="arrow_downward" [size]="16" />
+                                </button>
+                            </span>
                             <g-icon name="chevron_right" class="muted" />
-                            @if (store.v3()) {
-                                <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
-                                    ><g-icon name="drag_handle" [size]="22"
-                                /></span>
-                            }
+                            <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
+                                ><g-icon name="drag_handle" [size]="22"
+                            /></span>
                         </div>
                     }
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel" id="cartoes" style="scroll-margin-top:1rem">
                 <div class="panel-head">
                     <h2>Cartões de crédito</h2>
                     <button class="btn" (click)="create('cards')"><g-icon name="add" [size]="18" />Cartão</button>
@@ -117,7 +114,6 @@ type Row = Record<string, any>;
                     class="list reorder-list"
                     cdkDropList
                     cdkDropListLockAxis="y"
-                    [cdkDropListDisabled]="!store.v3()"
                     (cdkDropListDropped)="drop('cards', rows().cards, $event)"
                 >
                     @for (c of rows().cards; track c['id']; let i = $index) {
@@ -155,39 +151,35 @@ type Row = Record<string, any>;
                             @if (networkLogo(c['network']); as n) {
                                 <img class="net-logo" [src]="n" alt="" referrerpolicy="no-referrer" />
                             }
-                            @if (store.v3()) {
-                                <span
-                                    class="order-btns"
-                                    (click)="$event.stopPropagation()"
-                                    (keydown.enter)="$event.stopPropagation()"
-                                    tabindex="-1"
+                            <span
+                                class="order-btns"
+                                (click)="$event.stopPropagation()"
+                                (keydown.enter)="$event.stopPropagation()"
+                                tabindex="-1"
+                            >
+                                <button
+                                    class="btn ghost icon"
+                                    (click)="move('cards', rows().cards, i, -1)"
+                                    [disabled]="i === 0"
+                                    aria-label="Subir"
+                                    title="Subir"
                                 >
-                                    <button
-                                        class="btn ghost icon"
-                                        (click)="move('cards', rows().cards, i, -1)"
-                                        [disabled]="i === 0"
-                                        aria-label="Subir"
-                                        title="Subir"
-                                    >
-                                        <g-icon name="arrow_upward" [size]="16" />
-                                    </button>
-                                    <button
-                                        class="btn ghost icon"
-                                        (click)="move('cards', rows().cards, i, 1)"
-                                        [disabled]="i === rows().cards.length - 1"
-                                        aria-label="Descer"
-                                        title="Descer"
-                                    >
-                                        <g-icon name="arrow_downward" [size]="16" />
-                                    </button>
-                                </span>
-                            }
+                                    <g-icon name="arrow_upward" [size]="16" />
+                                </button>
+                                <button
+                                    class="btn ghost icon"
+                                    (click)="move('cards', rows().cards, i, 1)"
+                                    [disabled]="i === rows().cards.length - 1"
+                                    aria-label="Descer"
+                                    title="Descer"
+                                >
+                                    <g-icon name="arrow_downward" [size]="16" />
+                                </button>
+                            </span>
                             <g-icon name="chevron_right" class="muted" />
-                            @if (store.v3()) {
-                                <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
-                                    ><g-icon name="drag_handle" [size]="22"
-                                /></span>
-                            }
+                            <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
+                                ><g-icon name="drag_handle" [size]="22"
+                            /></span>
                         </div>
                     }
                 </div>
@@ -220,33 +212,31 @@ type Row = Record<string, any>;
                                     <div class="grow">
                                         <div class="title">{{ c['name'] }}</div>
                                     </div>
-                                    @if (store.v3()) {
-                                        <span
-                                            class="order-btns"
-                                            (click)="$event.stopPropagation()"
-                                            (keydown.enter)="$event.stopPropagation()"
-                                            tabindex="-1"
+                                    <span
+                                        class="order-btns"
+                                        (click)="$event.stopPropagation()"
+                                        (keydown.enter)="$event.stopPropagation()"
+                                        tabindex="-1"
+                                    >
+                                        <button
+                                            class="btn ghost icon"
+                                            (click)="move('categories', sibs(c), sibs(c).indexOf(c), -1)"
+                                            [disabled]="sibs(c).indexOf(c) === 0"
+                                            aria-label="Subir"
+                                            title="Subir"
                                         >
-                                            <button
-                                                class="btn ghost icon"
-                                                (click)="move('categories', sibs(c), sibs(c).indexOf(c), -1)"
-                                                [disabled]="sibs(c).indexOf(c) === 0"
-                                                aria-label="Subir"
-                                                title="Subir"
-                                            >
-                                                <g-icon name="arrow_upward" [size]="16" />
-                                            </button>
-                                            <button
-                                                class="btn ghost icon"
-                                                (click)="move('categories', sibs(c), sibs(c).indexOf(c), 1)"
-                                                [disabled]="sibs(c).indexOf(c) === sibs(c).length - 1"
-                                                aria-label="Descer"
-                                                title="Descer"
-                                            >
-                                                <g-icon name="arrow_downward" [size]="16" />
-                                            </button>
-                                        </span>
-                                    }
+                                            <g-icon name="arrow_upward" [size]="16" />
+                                        </button>
+                                        <button
+                                            class="btn ghost icon"
+                                            (click)="move('categories', sibs(c), sibs(c).indexOf(c), 1)"
+                                            [disabled]="sibs(c).indexOf(c) === sibs(c).length - 1"
+                                            aria-label="Descer"
+                                            title="Descer"
+                                        >
+                                            <g-icon name="arrow_downward" [size]="16" />
+                                        </button>
+                                    </span>
                                     <g-icon name="chevron_right" class="muted" />
                                 </div>
                             }
@@ -443,12 +433,10 @@ type Row = Record<string, any>;
                                     ></label
                                 >
                             }
-                            @if (store.v2()) {
-                                <label class="check"
-                                    ><input name="hd" type="checkbox" [(ngModel)]="e.row['hide_from_total']" /> Não somar no saldo geral
-                                    (continua no fluxo de caixa dela)</label
-                                >
-                            }
+                            <label class="check"
+                                ><input name="hd" type="checkbox" [(ngModel)]="e.row['hide_from_total']" /> Não somar no saldo geral
+                                (continua no fluxo de caixa dela)</label
+                            >
                         }
                         @case ('cards') {
                             <span class="field-label" id="lbl-bandeira">Bandeira</span>
@@ -512,7 +500,7 @@ type Row = Record<string, any>;
                                     </select></label
                                 >
                             </div>
-                            @if (store.v2() && e.row['kind'] === 'expense' && !e.row['parent_id']) {
+                            @if (e.row['kind'] === 'expense' && !e.row['parent_id']) {
                                 <label class="check"
                                     ><input name="es" type="checkbox" [(ngModel)]="e.row['essential']" /> Gasto essencial (moradia, mercado,
                                     saúde…) — usado no equilíbrio 50/30</label
@@ -558,7 +546,7 @@ type Row = Record<string, any>;
                 </div>
                 <footer>
                     @if (e.row['id']) {
-                        <button type="button" class="btn ghost danger" (click)="remove(e.kind, e.row['id'])">
+                        <button type="button" class="btn ghost danger" (click)="remove(e.kind, e.row)">
                             <g-icon name="delete" [size]="18" />Excluir
                         </button>
                     } @else {
@@ -580,6 +568,10 @@ export class Settings {
         else notify('Teste enviado. Deve chegar em segundos.');
     }
     store = inject(Store);
+    router = inject(Router);
+    /** links de outras telas: ?novo=cards abre o cadastro; ?cartao=<id> abre a edição do cartão */
+    novo = input<string>();
+    cartao = input<string>();
     icons = CATEGORY_ICONS;
     networks = NETWORKS;
     allBanks = BANKS;
@@ -651,6 +643,14 @@ export class Settings {
             sb.rpc('report_by_tag', { p_from: '2000-01-01', p_to: '2100-12-31' }).then((r) => r.data ?? []),
         ]);
         this.rows.set({ accounts: [...a].sort(byPosition), cards: [...c].sort(byPosition), categories: [...k].sort(byPosition) });
+        const card = this.rows().cards.find((r) => r['id'] === this.cartao()),
+            novo = this.novo() as Kind | undefined;
+        if (card || (novo && novo in this.rows())) {
+            if (card) this.open('cards', card);
+            else this.create(novo!);
+            // tira o pedido da URL: recarregar a lista não reabre o formulário
+            void this.router.navigate([], { queryParams: { novo: null, cartao: null }, queryParamsHandling: 'merge', replaceUrl: true });
+        }
         this.tags.set((t as { tag: string; n: number }[]).sort((x, y) => x.tag.localeCompare(y.tag)));
     }
 
@@ -715,11 +715,44 @@ export class Settings {
         }
         this.edit.set(null);
         await this.store.load();
-        notify('Salvo');
+        // conta nova: hora boa de mostrar que os lançamentos dela podem chegar sozinhos
+        const nova = kind === 'accounts' && !row['id'];
+        if (!(
+            nova &&
+            offerBank(`Conta criada. Quer trazer os lançamentos do ${row['name']} sozinhos? Conecte pelo Open Finance.`, () =>
+                document.getElementById('bancos')?.scrollIntoView({ behavior: 'smooth' }),
+            )
+        ))
+            notify('Salvo');
     }
 
-    async remove(kind: Kind, id: string) {
-        await must(sb.from(kind).delete().eq('id', id));
+    async remove(kind: Kind, r: Row) {
+        // conta/cartão apaga junto os lançamentos (on delete cascade); o cartão, também os pagamentos de fatura feitos na conta
+        const of =
+            kind === 'accounts' ? `account_id.eq.${r['id']}` : kind === 'cards' ? `card_id.eq.${r['id']},pays_card_id.eq.${r['id']}` : null;
+        const c = of ? await sb.from('transactions').select('id', { count: 'exact', head: true }).or(of) : null;
+        if (c?.error) return notify(c.error.message, { tone: 'error' });
+        const n = c?.count ?? 0;
+        const go = await ask(
+            `Excluir ${r['name']}?`,
+            [
+                {
+                    value: 'del',
+                    label: n ? `Excluir e apagar ${n} lançamento${n === 1 ? '' : 's'}` : 'Excluir',
+                    icon: 'delete',
+                    danger: true,
+                },
+            ],
+            n ? 'Os lançamentos não voltam. Para tirar da frente sem apagar, marque Arquivado.' : undefined,
+        );
+        if (!go) return;
+        const files = of
+            ? (await must(sb.from('transactions').select('attachments').or(of).neq('attachments', '{}'))).flatMap(
+                  (t) => t.attachments as string[],
+              )
+            : [];
+        await must(sb.from(kind).delete().eq('id', r['id']));
+        void this.store.dropUnusedFiles(files);
         this.edit.set(null);
         await this.store.load();
         notify('Excluído');

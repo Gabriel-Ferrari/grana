@@ -23,10 +23,6 @@ export class Store {
     recovery = signal(false);
 
     catById = computed(() => new Map(this.categories().map((c) => [c.id, c])));
-    /** banco já tem a migração 20261102080000 (anexos, essenciais, balanço…)? Até lá, essas partes ficam escondidas. */
-    /** migração 20261102090000 (ordem manual) já está no banco? */
-    v3 = computed(() => this.accounts().some((a) => a.position !== undefined));
-    v2 = computed(() => this.categories().some((c) => c.essential !== undefined));
     originName = computed(() => {
         const m = new Map<string, string>();
         this.accounts().forEach((a) => m.set(a.id, a.name));
@@ -104,6 +100,34 @@ export class Store {
         });
     }
 
+    /** Apaga do Storage os anexos que nenhum lançamento usa mais (as parcelas dividem o mesmo arquivo). */
+    async dropUnusedFiles(paths: string[]) {
+        if (!paths.length) return;
+        const { data, error } = await sb.from('transactions').select('attachments').overlaps('attachments', paths);
+        if (error) return;
+        const used = new Set(data.flatMap((r) => r.attachments as string[]));
+        const gone = paths.filter((p) => !used.has(p));
+        if (gone.length) await sb.storage.from('anexos').remove(gone);
+    }
+
+    /** Para revisar (Início e página própria): troca a categoria e oferece aplicar aos outros com a mesma descrição. */
+    async setCat(t: { id: string; description: string }, category_id: string) {
+        await must(
+            sb
+                .from('transactions')
+                .update({ category_id: category_id || null })
+                .eq('id', t.id),
+        );
+        void this.offerSameDesc(t, category_id);
+    }
+
+    /** Para revisar: aprova, com Desfazer. */
+    approve(t: { id: string; description: string }) {
+        return this.withUndo(`${t.description} aprovado`, { column: 'id', value: t.id }, () =>
+            must(sb.from('transactions').update({ reviewed: true }).eq('id', t.id)),
+        );
+    }
+
     /** Excluir com Desfazer. Fixo/parcelado pergunta o alcance, como no Organizze: só este, este e os próximos, ou todos.
      *  false = cancelou (a exclusão segue em segundo plano, a tela pode fechar na hora). */
     async removeTx(t: Partial<Tx>): Promise<boolean> {
@@ -157,6 +181,10 @@ export class Store {
         const before = await must(q);
         await apply();
         await this.load();
+        // anexos de lançamento excluído saem do Storage depois do Desfazer (desfez: voltam a ser usados e ficam)
+        // shortcut: fechar o app nesses 10 s deixa o arquivo órfão; limpar no servidor (cron) se isso pesar no 1 GB
+        const files = before.flatMap((r) => (r.attachments ?? []) as string[]);
+        if (files.length) setTimeout(() => void this.dropUnusedFiles(files), 10_000);
         notify(text, {
             action: {
                 label: 'Desfazer',

@@ -1,26 +1,29 @@
 import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { Meter } from '../../shared/ui/charts';
-import { BrlPipe, Card, DmyPipe, Invoice, Store, Tx, catIcon, monthLabel, must, notify, sb, toCents, today } from '../../core';
+import { BrlPipe, Card, DmyPipe, Invoice, Store, Tx, catIcon, monthLabel, must, sb, today } from '../../core';
 import { Icon } from '../../shared/ui/icon';
 import { BankLogo, networkLogo, bankColor } from '../../shared/banks';
-import { invoiceStatus } from './invoice';
+import { invoiceClosing, invoiceStatus } from './invoice';
 
 type Inv = Invoice & { due: number; running_due: number };
 
 @Component({
-    imports: [BrlPipe, DmyPipe, FormsModule, RouterLink, Icon, Meter, BankLogo],
+    imports: [BrlPipe, DmyPipe, RouterLink, Icon, Meter, BankLogo],
     host: { class: 'cards-page' },
     template: `
-        <div class="page-title reveal"><h1>Cartões</h1></div>
+        <div class="page-title reveal">
+            <h1>Cartões</h1>
+            <a class="btn" routerLink="/ajustes" [queryParams]="{ novo: 'cards' }"><g-icon name="add" [size]="18" />Novo cartão</a>
+        </div>
 
         @if (!cards().length) {
             <section class="panel empty-state">
                 <g-icon name="credit_card" />
                 <div>
-                    <b>Nenhum cartão</b>Cadastre em <a routerLink="/ajustes" class="link-more">Ajustes</a> com dia de fechamento e
-                    vencimento.
+                    <b>Nenhum cartão</b>Toque em
+                    <a routerLink="/ajustes" [queryParams]="{ novo: 'cards' }" class="link-more">Novo cartão</a> e informe o dia de
+                    fechamento e o de vencimento.
                 </div>
             </section>
         }
@@ -64,12 +67,17 @@ type Inv = Invoice & { due: number; running_due: number };
         @if (card(); as c) {
             <section class="panel reveal">
                 <g-meter label="Limite usado" [value]="c.limit_cents - c.available" [max]="c.limit_cents" />
-                <p class="muted small" style="margin:.6rem 0 0">
-                    Fecha dia {{ c.closing_day }} · vence dia {{ c.due_day }}
-                    @if (c.current_invoice_date && c.current_invoice_due > 0) {
-                        · fatura {{ c.current_invoice_date | dmy: true }} <b [class]="'inv-' + status(c).tone">{{ status(c).text }}</b>
-                    }
-                </p>
+                <div class="row between wrap" style="margin-top:.6rem;gap:.4rem .8rem">
+                    <p class="muted small" style="margin:0">
+                        Fecha dia {{ c.closing_day }} · vence dia {{ c.due_day }}
+                        @if (c.current_invoice_date && c.current_invoice_due > 0) {
+                            · fatura {{ c.current_invoice_date | dmy: true }} <b [class]="'inv-' + status(c).tone">{{ status(c).text }}</b>
+                        }
+                    </p>
+                    <a class="btn ghost sm" routerLink="/ajustes" [queryParams]="{ cartao: c.id }"
+                        ><g-icon name="edit" [size]="16" />Editar cartão</a
+                    >
+                </div>
             </section>
 
             <div class="inv-strip reveal" role="tablist" aria-label="Faturas">
@@ -100,7 +108,7 @@ type Inv = Invoice & { due: number; running_due: number };
                         <div>
                             <h2>Fatura de {{ long(i.invoice_date) }}</h2>
                             <p class="muted small" style="margin:.15rem 0 0">
-                                vence {{ i.invoice_date | dmy }} ·
+                                fechou {{ closing(i) | dmy: true }} · vence {{ i.invoice_date | dmy }} ·
                                 <span [class.pos]="i.is_paid" [class.neg]="!i.is_paid && i.invoice_date < hoje">{{
                                     i.is_paid ? 'paga' : i.invoice_date < hoje ? 'vencida' : 'em aberto'
                                 }}</span>
@@ -139,6 +147,12 @@ type Inv = Invoice & { due: number; running_due: number };
                         </div>
                     </div>
 
+                    @if (i.due > 0) {
+                        <button type="button" class="btn lime pay-cta" (click)="pay(i)">
+                            <g-icon name="payments" [size]="20" />Pagar fatura
+                        </button>
+                    }
+
                     @for (p of payments(); track p.id) {
                         <div class="item click pay-row" (click)="store.open(p)" tabindex="0" (keydown.enter)="store.open(p)">
                             <span class="cat-ico" style="--cc: var(--in)"><span class="ms">check_circle</span></span>
@@ -153,29 +167,6 @@ type Inv = Invoice & { due: number; running_due: number };
                             </div>
                             <span class="amt">{{ p.amount | brl }}</span>
                         </div>
-                    }
-
-                    @if (i.due > 0) {
-                        <form
-                            class="row wrap"
-                            (ngSubmit)="pay(i)"
-                            style="padding:.8rem;border-radius:14px;background:var(--sunk);margin-bottom:.6rem"
-                        >
-                            <label style="min-width:150px"
-                                >Pagar com
-                                <select name="acc" [(ngModel)]="payAcc">
-                                    @for (a of store.accounts(); track a.id) {
-                                        <option [value]="a.id">{{ a.name }}</option>
-                                    }
-                                </select></label
-                            >
-                            <label style="min-width:110px"
-                                >Valor
-                                <input name="v" type="number" step="0.01" [(ngModel)]="payValue" [placeholder]="(i.due / 100).toFixed(2)"
-                            /></label>
-                            <label style="min-width:130px">Data <input name="d" type="date" [(ngModel)]="payDate" /></label>
-                            <button class="btn lime" style="align-self:flex-end"><g-icon name="payments" [size]="18" />Pagar fatura</button>
-                        </form>
                     }
 
                     <!-- compras agrupadas por dia, lista corrida como em Lançamentos (Organizze) -->
@@ -244,9 +235,10 @@ export class Cards {
     /** dívida (+) ou crédito (−) que veio das faturas anteriores: running_due = anterior + gastos − pagamentos */
     carry = (i: Inv) => i.running_due - i.total + i.paid;
     loadingTx = signal(false);
-    payAcc = '';
-    payValue: number | null = null;
-    payDate = today();
+    closing = (i: Inv) => {
+        const c = this.card();
+        return c ? invoiceClosing(i.invoice_date, c.closing_day, c.due_day) : '';
+    };
     short = (d: string) => monthLabel(d, true).replace('.', '') + '/' + d.slice(2, 4);
     long = (d: string) => monthLabel(d);
     icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
@@ -259,7 +251,6 @@ export class Cards {
             const c = this.card();
             untracked(() => {
                 if (!c) return;
-                this.payAcc ||= c.payment_account_id ?? this.store.accounts()[0]?.id ?? '';
                 this.fetch(c.id);
             });
         });
@@ -271,7 +262,6 @@ export class Cards {
 
     select(id: string) {
         this.inv.set('');
-        this.payAcc = this.cards().find((x) => x.id === id)?.payment_account_id ?? this.payAcc;
         this.router.navigate([], { queryParams: { c: id }, replaceUrl: true });
     }
 
@@ -308,21 +298,17 @@ export class Cards {
         this.loadingTx.set(false);
     }
 
-    async pay(i: Inv) {
-        const value = this.payValue ? toCents(this.payValue) : i.due;
-        if (!this.payAcc || value <= 0) return;
-        await must(
-            sb.from('transactions').insert({
-                description: `Pagamento fatura ${this.card()?.name} ${i.invoice_date.slice(5, 7)}/${i.invoice_date.slice(0, 4)}`,
-                amount: -value,
-                date: this.payDate,
-                account_id: this.payAcc,
-                pays_card_id: i.card_id,
-                invoice_date: i.invoice_date,
-            }),
-        );
-        this.payValue = null;
-        await this.store.load();
-        notify('Fatura paga. Limite liberado.');
+    /** Pagar fatura (Organizze): abre a folha de lançamento com o valor a pagar, a conta do cartão e hoje; dá para editar tudo */
+    pay(i: Inv) {
+        const c = this.card();
+        this.store.open({
+            kind: 'expense',
+            description: `Pagamento fatura ${c?.name.trim() ?? ''} ${i.invoice_date.slice(5, 7)}/${i.invoice_date.slice(0, 4)}`,
+            amount: -i.due,
+            date: today(),
+            account_id: c?.payment_account_id ?? this.store.accounts().find((a) => !a.archived)?.id ?? null,
+            pays_card_id: i.card_id,
+            invoice_date: i.invoice_date,
+        });
     }
 }

@@ -2,8 +2,11 @@ import { Component, effect, inject, signal, untracked } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { BankLogo, bankOf } from '../../shared/banks';
-import { BrlPipe, Store, must, notify, sb, theme } from '../../core';
+import { BrlPipe, Store, must, notify, onBack, sb, theme } from '../../core';
 import { Icon } from '../../shared/ui/icon';
+import { SheetDrag } from '../../shared/ui/sheet';
+import { bankCount, ofGuide, pluggySync } from './pluggy';
+export { offerBank } from './pluggy';
 
 interface PItem {
     id: string;
@@ -27,26 +30,16 @@ interface PAccount {
 
 const MEUPLUGGY = 200; // id do conector MeuPluggy (Open Finance gratuito para uso pessoal)
 
-/** Sincroniza com a Pluggy (função no Supabase). Usado pelo painel e ao abrir o app. */
-export async function pluggySync(): Promise<{ inserted: number; merged: number; errors: string[] } | null> {
-    const { data, error } = await sb.functions.invoke('pluggy', { body: { action: 'sync' } });
-    if (error) {
-        notify('Falha ao sincronizar com o banco', { tone: 'error' });
-        return null;
-    }
-    return data;
-}
-
 @Component({
     selector: 'g-openfinance',
-    imports: [DatePipe, FormsModule, Icon, BankLogo, BrlPipe],
+    imports: [DatePipe, FormsModule, Icon, BankLogo, BrlPipe, SheetDrag],
     template: `
         <div class="panel-head">
             <div>
                 <h2>Bancos conectados</h2>
                 <p class="muted small" style="margin:.15rem 0 0">Open Finance via Pluggy · atualiza 1× por dia</p>
             </div>
-            <button class="btn lime" (click)="connect()" [disabled]="busy()"><g-icon name="link" [size]="18" />Conectar banco</button>
+            <button class="btn lime" (click)="openGuide()" [disabled]="busy()"><g-icon name="link" [size]="18" />Conectar banco</button>
         </div>
 
         @for (it of items(); track it.id) {
@@ -123,45 +116,125 @@ export async function pluggySync(): Promise<{ inserted: number; merged: number; 
             </div>
         }
 
-        <details class="guide">
-            <summary><g-icon name="notes" [size]="18" />Passo a passo: conectar seus bancos (grátis)</summary>
-            <ol>
-                <li>
-                    <b>Crie sua conta no MeuPluggy</b> em <a href="https://meu.pluggy.ai" target="_blank" rel="noopener">meu.pluggy.ai</a> e
-                    conecte cada banco (Nubank, Bradesco, Itaú…). Cada banco pede autorização pelo próprio app dele — é o Open Finance
-                    oficial do Banco Central.
-                </li>
-                <li>
-                    <b>Crie uma conta de desenvolvedor</b> em
-                    <a href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">dashboard.pluggy.ai</a> (time com qualquer nome,
-                    uso pessoal). O trial de 15 dias serve para configurar; a conexão MeuPluggy segue funcionando depois.
-                </li>
-                <li><b>Copie o Client ID e gere o Client Secret</b> no dashboard (o secret aparece uma vez só).</li>
-                <li>
-                    <b>Guarde as chaves no Supabase</b> (nunca no código):
-                    <code>npx supabase secrets set PLUGGY_CLIENT_ID=… PLUGGY_CLIENT_SECRET=…</code> — ou num arquivo
-                    <code>.env.pluggy</code> fora do git e <code>npx supabase secrets set --env-file .env.pluggy</code>.
-                </li>
-                <li><b>Aqui no grana, toque em “Conectar banco”</b>, escolha <b>MeuPluggy</b> e autorize. Repita uma vez por banco.</li>
-                <li>
-                    <b>Diga onde lançar cada conta</b>: para cada conta/cartão que aparecer acima, escolha a conta ou cartão do grana
-                    correspondente.
-                </li>
-                <li>
-                    <b>Pronto.</b> O app sincroniza ao abrir (até 1× a cada 12 h) e pelo botão “Sincronizar”. O que já tinha chegado por
-                    notificação não duplica: o grana junta lançamentos de mesmo valor com até 2 dias de diferença.
-                </li>
-            </ol>
-            <p class="muted small">
-                A autorização do Open Finance vale até 12 meses; quando vencer, o status muda e basta conectar de novo.
-            </p>
-        </details>
+        <button type="button" class="btn ghost sm" style="margin-top:.4rem" (click)="guide.set(0)">
+            <g-icon name="menu_book" [size]="16" />Como funciona (passo a passo)
+        </button>
+
+        @if (guide() >= 0) {
+            <!-- passo a passo ilustrado (abre ao tocar em "Conectar banco"): o que fazer no MeuPluggy e aqui -->
+            <div class="scrim ask-scrim" (click)="guide.set(-1)" (keydown.escape)="guide.set(-1)" tabindex="-1"></div>
+            <div #guideSheet class="sheet of-guide" role="dialog" aria-modal="true" aria-label="Conectar banco: passo a passo">
+                <div class="sheet-grab" [gSheetDrag]="guideSheet" (dismissed)="guide.set(-1)"><span class="grabber"></span></div>
+                <div class="of-art" aria-hidden="true">
+                    @switch (steps[guide()].art) {
+                        @case ('account') {
+                            <div class="of-phone">
+                                <div class="of-url"><g-icon name="lock" [size]="12" />meu.pluggy.ai</div>
+                                <div class="of-logo"><g-icon name="hub" [size]="26" /></div>
+                                <span class="of-field"></span><span class="of-field"></span>
+                                <span class="of-cta">Criar conta grátis</span>
+                            </div>
+                        }
+                        @case ('banks') {
+                            <div class="of-hub">
+                                <span class="of-core"><g-icon name="hub" [size]="22" />MeuPluggy</span>
+                                @for (b of hubBanks; track b; let i = $index) {
+                                    <span class="of-sat" [style.--i]="i"><g-bank [name]="b" [institution]="b" [size]="40" /></span>
+                                }
+                            </div>
+                        }
+                        @case ('link') {
+                            <div class="of-pair">
+                                <span class="of-app grana">g</span>
+                                <span class="of-wire"><g-icon name="sync_alt" [size]="22" /></span>
+                                <span class="of-app pluggy"><g-icon name="hub" [size]="26" /></span>
+                            </div>
+                            <span class="of-badge"><g-icon name="verified_user" [size]="16" />Só leitura · revogue quando quiser</span>
+                        }
+                        @case ('map') {
+                            <div class="of-map">
+                                @for (r of mapDemo; track r.from) {
+                                    <div class="of-map-row">
+                                        <g-bank [name]="r.bank" [institution]="r.bank" [size]="28" /><span>{{ r.from }}</span>
+                                        <g-icon name="arrow_forward" [size]="18" class="muted" /><b>{{ r.to }}</b>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+                <p class="of-step-n">Passo {{ guide() + 1 }} de {{ steps.length }}</p>
+                <h3 class="of-step-title">{{ steps[guide()].title }}</h3>
+                <p class="of-step-text">{{ steps[guide()].text }}</p>
+                @if (steps[guide()].art === 'account') {
+                    <a class="btn" href="https://meu.pluggy.ai" target="_blank" rel="noopener"
+                        ><g-icon name="open_in_new" [size]="18" />Abrir meu.pluggy.ai</a
+                    >
+                }
+                <div class="of-dots" aria-hidden="true">
+                    @for (st of steps; track st.title; let i = $index) {
+                        <i [class.on]="i === guide()"></i>
+                    }
+                </div>
+                <div class="row between">
+                    @if (guide() > 0) {
+                        <button type="button" class="btn ghost" (click)="guide.set(guide() - 1)">
+                            <g-icon name="chevron_left" [size]="18" />Voltar
+                        </button>
+                    } @else {
+                        <button type="button" class="btn ghost" (click)="guide.set(-1)">Agora não</button>
+                    }
+                    @if (guide() < steps.length - 1) {
+                        <button type="button" class="btn primary" (click)="guide.set(guide() + 1)">
+                            Próximo<g-icon name="chevron_right" [size]="18" />
+                        </button>
+                    } @else {
+                        <button type="button" class="btn lime" (click)="guide.set(-1); connect()" [disabled]="busy()">
+                            <g-icon name="link" [size]="18" />Conectar agora
+                        </button>
+                    }
+                </div>
+            </div>
+        }
     `,
-    host: { class: 'panel', style: 'display:block' },
+    host: { class: 'panel', id: 'bancos', style: 'display:block;scroll-margin-top:1rem' },
 })
 export class OpenFinance {
     store = inject(Store);
     busy = signal(false);
+    /** passo aberto do guia ilustrado; -1 = fechado */
+    guide = signal(-1);
+    steps = [
+        {
+            art: 'account',
+            title: 'Crie sua conta no MeuPluggy',
+            text: 'É grátis para uso pessoal. Entre em meu.pluggy.ai e crie a conta com seu e-mail.',
+        },
+        {
+            art: 'banks',
+            title: 'Conecte seus bancos lá',
+            text: 'No MeuPluggy, adicione cada banco. Cada um pede autorização no próprio app dele: é o Open Finance oficial do Banco Central.',
+        },
+        {
+            art: 'link',
+            title: 'Autorize o grana',
+            text: 'Na próxima tela escolha MeuPluggy, entre com o mesmo e-mail e autorize. O grana só lê: não move dinheiro.',
+        },
+        {
+            art: 'map',
+            title: 'Diga onde lançar',
+            text: 'Para cada conta ou cartão que aparecer, escolha o do grana. Depois chega tudo sozinho, 1× por dia, sem duplicar o que veio pela notificação.',
+        },
+    ];
+    hubBanks = ['nubank', 'bradesco', 'itau', 'caixa'];
+    mapDemo = [
+        { bank: 'nubank', from: 'Nubank · conta', to: 'Nubank' },
+        { bank: 'nubank', from: 'Nubank · cartão', to: 'Cartão Nubank' },
+    ];
+    /** "Conectar banco": guia do começo; quem já conectou um banco vai direto ao passo de autorizar */
+    openGuide() {
+        this.guide.set(this.items().length ? 2 : 0);
+    }
     items = signal<PItem[]>([]);
     accounts = signal<PAccount[]>([]);
     accountsOf = (item: string) => this.accounts().filter((a) => a.item_id === item);
@@ -184,6 +257,18 @@ export class OpenFinance {
             this.store.version();
             untracked(() => this.fetch());
         });
+        // voltar do Android / Esc fecha o guia
+        effect((onCleanup) => {
+            if (this.guide() >= 0) onCleanup(onBack(() => this.guide.set(-1)));
+        });
+        // convite de outra tela (offerBank): abre o guia aqui
+        effect(() => {
+            if (!ofGuide()) return;
+            untracked(() => {
+                ofGuide.set(false);
+                this.openGuide();
+            });
+        });
     }
 
     async fetch() {
@@ -192,6 +277,7 @@ export class OpenFinance {
             must(sb.from('pluggy_accounts').select('*').order('name')),
         ]);
         this.items.set(i as PItem[]);
+        bankCount.set(i.length);
         this.accounts.set(a as PAccount[]);
         // sugere o destino de contas novas pelo banco (ex.: "Nubank" -> conta/cartão Nubank)
         for (const acc of (a as PAccount[]).filter((x) => !x.account_id && !x.card_id && !x.ignored)) {

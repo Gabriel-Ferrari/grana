@@ -45,15 +45,9 @@ Deno.serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: cors });
     if (req.method !== 'POST') return json({ error: 'method' }, 405);
     const jwt = (req.headers.get('authorization') ?? '').replace(/^Bearer /i, '');
-    const role = (() => {
-        try {
-            return JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role;
-        } catch {
-            return null;
-        }
-    })();
     try {
-        if (role === 'service_role') {
+        // cron: compara a chave (não depende do gateway checar o JWT)
+        if (jwt === Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
             const { data: msgs, error } = await db.rpc('push_reminders');
             if (error) throw error;
             const users = [...new Set((msgs as Msg[]).map((m) => m.user_id))];

@@ -41,7 +41,16 @@ Deno.serve(async (req) => {
     const { data: row, error } = await db
         .from('notifications')
         .upsert(
-            { user_id, package: pkg, title, body, posted_at: new Date(postedAt).toISOString(), hash, parsed, ...(ignored ? { status: 'ignored' } : {}) },
+            {
+                user_id,
+                package: pkg,
+                title,
+                body,
+                posted_at: new Date(postedAt).toISOString(),
+                hash,
+                parsed,
+                ...(ignored ? { status: 'ignored' } : {}),
+            },
             { onConflict: 'user_id,hash', ignoreDuplicates: true },
         )
         .select('id')
@@ -54,12 +63,14 @@ Deno.serve(async (req) => {
     // destino: cartão pelo final ou pelo app; conta pelo app
     let card_id: string | null = null,
         account_id: string | null = null;
-    if (parsed.kind === 'card') {
+    if (parsed.kind === 'card' || parsed.refund) {
         const { data: cards } = await db.from('cards').select('id, last4, notify_package').eq('user_id', user_id).eq('archived', false);
         const byLast4 = cards?.find((c) => parsed.last4 && c.last4 === parsed.last4);
         const byPkg = cards?.filter((c) => c.notify_package === pkg);
-        card_id = byLast4?.id ?? (byPkg?.length === 1 ? byPkg[0].id : null);
-    } else {
+        // estorno só pelo final: o app do banco notifica conta e cartão
+        card_id = byLast4?.id ?? (!parsed.refund && byPkg?.length === 1 ? byPkg[0].id : null);
+    }
+    if (!card_id && parsed.kind !== 'card') {
         const { data: accs } = await db
             .from('accounts')
             .select('id')

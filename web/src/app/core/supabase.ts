@@ -16,3 +16,16 @@ export async function must<T>(p: PromiseLike<{ data: T; error: { message: string
     }
     return data as NonNullable<T>; // update/delete sem select devolvem null; quem chama não usa o retorno
 }
+
+/** Todas as linhas, em páginas de 1000: a API corta cada resposta em max_rows (1000) sem avisar.
+ *  `page` monta a consulta de novo a cada página, com ordem estável (ex.: termina em id). */
+export async function allRows<T>(
+    page: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+): Promise<T[]> {
+    const out: T[] = [];
+    for (let i = 0; ; i += 1000) {
+        const rows = await must(page(i, i + 999));
+        out.push(...rows);
+        if (rows.length < 1000) return out;
+    }
+}

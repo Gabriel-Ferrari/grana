@@ -10,8 +10,8 @@ export interface Account {
     forecast: number;
     institution: string | null;
     hide_from_total: boolean;
-    /** ordem manual (Ajustes); ausente antes da migração 20261102090000 */
-    position?: number;
+    /** ordem manual (Ajustes) */
+    position: number;
 }
 export interface Card {
     id: string;
@@ -28,7 +28,7 @@ export interface Card {
     current_invoice_due: number;
     institution: string | null;
     network: string | null;
-    position?: number;
+    position: number;
 }
 export interface Category {
     id: string;
@@ -39,7 +39,7 @@ export interface Category {
     archived: boolean;
     icon: string | null;
     essential: boolean;
-    position?: number;
+    position: number;
 }
 /** ordem manual (position) e depois nome — igual em todo o app */
 export const byPosition = <T extends { position?: number; name: string }>(a: T, b: T) =>

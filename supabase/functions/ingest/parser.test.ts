@@ -41,6 +41,17 @@ const cases: [string, ReturnType<typeof parse>][] = [
     ['Seu código de segurança é 123456', null],
 ];
 
+test('data sem ano na virada: 31/12 numa notificação de 01/01 é do ano anterior', () => {
+    const p = parse('Compra aprovada no cartao final 1234 de R$ 10,00 em 31/12 LOJA', Date.parse('2027-01-01T12:00:00Z'));
+    assert.equal(p?.date, '2026-12-31');
+});
+
+test('estorno no cartão de crédito volta na fatura; no débito, não', () => {
+    const p = parse('Estorno de R$ 50,00 da compra em LOJA X no cartão final 1234', at);
+    assert.deepEqual([p?.kind, p?.amount, p?.last4, p?.refund], ['income', 5000, '1234', true]);
+    assert.equal(parse('Estorno de R$ 50,00 da compra no débito, cartão final 1234', at)?.refund, undefined);
+});
+
 for (const [text, expected] of cases) {
     test(text.slice(0, 50), () => assert.deepEqual(parse(text, at), expected));
 }

@@ -7,7 +7,7 @@
     --line: light-dark(oklch(90.5% 0.012 128), oklch(29.5% 0.015 165));
     --ink: light-dark(oklch(23% 0.026 165), oklch(95.5% 0.008 120));
     --ink-2: light-dark(oklch(42% 0.022 165), oklch(79% 0.012 140));
-    --muted: light-dark(oklch(55% 0.016 160), oklch(65% 0.013 155));
+    --muted: light-dark(oklch(49% 0.016 160), oklch(65% 0.013 155));
     --brand: light-dark(oklch(47% 0.09 158), oklch(74% 0.12 156));
     --forest: light-dark(oklch(31% 0.055 162), oklch(29% 0.05 162));
     --on-forest: oklch(96.5% 0.02 120);
@@ -138,7 +138,7 @@ h3 {
     place-items: center;
     font-size: 20px;
     background: color-mix(in oklch, var(--cc) 20%, var(--surface));
-    color: color-mix(in oklch, var(--cc) 75%, var(--ink));
+    color: light-dark(color-mix(in oklch, var(--cc) 55%, var(--ink)), color-mix(in oklch, var(--cc) 75%, var(--ink)));
 }
 .cat-ico.sm {
     width: 26px;
@@ -181,6 +181,10 @@ h3 {
     background: var(--sunk);
     border-radius: 999px;
     margin: 0 auto;
+    /* nunca empurra a página para o lado: em tela estreita a faixa rola */
+    min-width: 0;
+    overflow-x: auto;
+    scrollbar-width: none;
 }
 .pills a {
     position: relative;
@@ -215,12 +219,27 @@ h3 {
         'GRAD' 0,
         'opsz' 24;
 }
+/* notebooks: 9 abas + ações não cabiam em 1440 px (página 22 px mais larga) */
+@media (max-width: 1500px) {
+    .pills a {
+        padding-inline: 0.65rem;
+    }
+}
+@media (max-width: 1360px) {
+    .pills a {
+        padding-inline: 0.55rem;
+        font-size: 0.85rem;
+    }
+    .pills a .ms {
+        display: none;
+    }
+}
 .badge {
     min-width: 18px;
     height: 18px;
     padding: 0 5px;
     border-radius: 9px;
-    background: var(--out);
+    background: oklch(53% 0.2 25); /* branco sobre ele: 4,9:1 (o --out dava 3,5:1) */
     color: white;
     font-size: 0.7rem;
     display: inline-grid;
@@ -565,6 +584,19 @@ textarea {
     padding: 0.45rem;
     border-radius: 12px;
 }
+.btn.sm {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.84rem;
+    color: var(--brand);
+}
+/* Pagar fatura (Organizze): botão largo logo abaixo do resumo da fatura */
+.btn.pay-cta {
+    width: 100%;
+    min-height: 52px;
+    margin: 0.2rem 0 0.8rem;
+    font-size: 1rem;
+    border-radius: 16px;
+}
 .btn:disabled {
     opacity: 0.5;
     pointer-events: none;
@@ -707,6 +739,34 @@ input[type='color'] {
 }
 .row.wrap {
     flex-wrap: wrap;
+}
+.row.wrap > label.check {
+    flex: 1 1 14rem;
+}
+/* valor com ação (👍) ao lado no desktop; no celular a ação desce para baixo do valor */
+.amt-col {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: none;
+}
+@media (max-width: 560px) {
+    .amt-col {
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.2rem;
+    }
+    .amt-col .paid-btn {
+        width: 32px;
+        height: 30px;
+    }
+}
+/* ações de um item de lista (botões): no celular descem para baixo do texto */
+.item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
 }
 .between {
     justify-content: space-between;
@@ -856,8 +916,8 @@ input[type='color'] {
     font-size: 13px;
 }
 .tag.auto {
-    background: color-mix(in oklch, var(--lime) 45%, var(--surface));
-    color: var(--on-lime);
+    background: light-dark(color-mix(in oklch, var(--lime) 45%, var(--surface)), color-mix(in oklch, var(--lime) 16%, var(--surface)));
+    color: light-dark(var(--on-lime), var(--lime));
 }
 /* joinha de pago (como no Organizze): cinza = pendente, verde cheio = pago */
 .paid-btn {
@@ -1067,7 +1127,8 @@ input[type='color'] {
 /* ───────── gráficos (dataviz) ───────── */
 .legend {
     display: flex;
-    gap: 1rem;
+    flex-wrap: wrap;
+    gap: 0.35rem 1rem;
     font-size: 0.78rem;
     font-weight: 650;
     color: var(--ink-2);
@@ -1077,6 +1138,7 @@ input[type='color'] {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+    white-space: nowrap;
 }
 .sw {
     width: 10px;
@@ -1093,8 +1155,8 @@ input[type='color'] {
     background: var(--out);
 }
 .key {
-    width: 14px;
-    height: 2.5px;
+    width: 18px;
+    height: 3px;
     border-radius: 2px;
     display: inline-block;
     vertical-align: middle;
@@ -2839,7 +2901,7 @@ textarea.bare {
 }
 .chip.blue {
     background: oklch(62% 0.16 245 / 0.15);
-    color: oklch(55% 0.16 245);
+    color: light-dark(oklch(48% 0.16 245), oklch(80% 0.11 245));
     border-color: transparent;
 }
 .panel.review {
@@ -3088,10 +3150,28 @@ body:has(.sel-bar) .toast {
     .item .title {
         font-size: 1rem;
         font-weight: 600;
+        /* no celular o nome não some em reticências: até 2 linhas */
+        white-space: normal;
+        overflow-wrap: anywhere;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
     }
     .item .sub {
         font-size: 0.84rem;
         margin-top: 0.1rem;
+        /* texto corrido: quebra entre palavras, o ícone fica junto do nome (flex deixava o ícone sozinho numa linha) */
+        display: block;
+        white-space: normal;
+    }
+    .item .sub .ms {
+        vertical-align: -0.2em;
+        margin-inline: 0.1rem 0.15rem;
+    }
+    .item-actions {
+        flex-basis: 100%;
+        justify-content: flex-end;
     }
     .item .amt {
         font-size: 1rem;
@@ -3414,6 +3494,21 @@ body:has(.sel-bar) .toast {
     color: var(--ink);
     border-bottom-color: var(--brand);
 }
+/* celular: as abas dividem a largura (como no Organizze), sem ícone, em vez de uma cortada na borda */
+@media (max-width: 560px) {
+    .tabs {
+        gap: 0;
+    }
+    .tabs button {
+        flex: 1 1 0;
+        justify-content: center;
+        padding: 0.65rem 0.2rem;
+        font-size: 0.88rem;
+    }
+    .tabs button g-icon {
+        display: none;
+    }
+}
 .rep-total {
     text-align: right;
 }
@@ -3473,6 +3568,20 @@ body:has(.sel-bar) .toast {
 .donut-center b {
     font-size: 1.15rem;
     font-variant-numeric: tabular-nums;
+}
+/* fatia tocada no celular: nome, valor e % no centro */
+.donut-center .donut-pick {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    max-width: 9.5rem;
+    color: var(--ink-2);
+}
+.donut-center small {
+    font-size: 0.75rem;
+    font-weight: 650;
+    color: var(--muted);
 }
 .cat-list .item {
     padding-block: 0.55rem;
@@ -4038,8 +4147,8 @@ body:has(.sel-bar) .toast {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: color-mix(in oklch, var(--lime) 40%, var(--surface));
-    color: var(--on-lime);
+    background: light-dark(color-mix(in oklch, var(--lime) 40%, var(--surface)), color-mix(in oklch, var(--lime) 16%, var(--surface)));
+    color: light-dark(var(--on-lime), var(--lime));
 }
 .more-ico .badge {
     position: absolute;
@@ -4284,5 +4393,242 @@ body:has(.sel-bar) .toast {
         flex: 1 1 100%;
         min-height: 52px;
         font-size: 1.05rem;
+    }
+}
+
+/* ───────── Open Finance: guia ilustrado (Conectar banco) ───────── */
+.of-guide {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding-bottom: calc(1.2rem + env(safe-area-inset-bottom));
+}
+.of-art {
+    display: grid;
+    place-items: center;
+    gap: 0.7rem;
+    min-height: 210px;
+    padding: 1.2rem 0.5rem;
+    border-radius: 20px;
+    background: radial-gradient(circle at 30% 20%, color-mix(in oklch, var(--lime) 22%, transparent), transparent 60%), var(--sunk);
+}
+.of-step-n {
+    margin: 0.4rem 0 0;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--brand);
+}
+.of-step-title {
+    margin: 0;
+    font-size: 1.25rem;
+    letter-spacing: -0.02em;
+}
+.of-step-text {
+    margin: 0 0 0.2rem;
+    color: var(--ink-2);
+    line-height: 1.5;
+}
+.of-guide > .btn {
+    align-self: flex-start;
+}
+.of-dots {
+    display: flex;
+    justify-content: center;
+    gap: 0.4rem;
+    margin: 0.4rem 0;
+}
+.of-dots i {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: var(--line);
+    transition: width 0.25s var(--ease);
+}
+.of-dots i.on {
+    width: 22px;
+    background: var(--brand);
+}
+/* passo 1: celular com o site do MeuPluggy */
+.of-phone {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.45rem;
+    width: 150px;
+    padding: 0.7rem 0.8rem 0.9rem;
+    border: 3px solid var(--ink);
+    border-radius: 24px;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+}
+.of-url {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 99px;
+    background: var(--sunk);
+    font-size: 0.68rem;
+    font-weight: 650;
+    color: var(--ink-2);
+}
+.of-logo {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin: 0.2rem 0;
+    border-radius: 14px;
+    background: oklch(55% 0.2 290);
+    color: white;
+}
+.of-field {
+    width: 100%;
+    height: 14px;
+    border-radius: 6px;
+    background: var(--sunk);
+}
+.of-cta {
+    width: 100%;
+    padding: 0.35rem 0;
+    border-radius: 9px;
+    background: var(--lime);
+    color: var(--on-lime);
+    font-size: 0.72rem;
+    font-weight: 750;
+    text-align: center;
+}
+/* passo 2: bancos ligados ao MeuPluggy */
+.of-hub {
+    position: relative;
+    width: 200px;
+    height: 180px;
+}
+.of-core {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: -50% -50%;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+    padding: 0.6rem 0.7rem;
+    border-radius: 18px;
+    background: oklch(55% 0.2 290);
+    color: white;
+    font-size: 0.72rem;
+    font-weight: 750;
+    z-index: 1;
+}
+.of-sat {
+    --a: calc(var(--i) * 90deg + 45deg);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    translate: calc(-50% + cos(var(--a)) * 82px) calc(-50% + sin(var(--a)) * 70px);
+}
+.of-sat::before {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 60px;
+    border-top: 2px dashed color-mix(in oklch, var(--ink) 30%, transparent);
+    transform-origin: 0 0;
+    rotate: calc(var(--a) + 180deg);
+    z-index: -1;
+}
+/* passo 3: grana ⇄ MeuPluggy */
+.of-pair {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+.of-app {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    box-shadow: var(--shadow);
+}
+.of-app.grana {
+    background: var(--lime);
+    color: var(--on-lime);
+    font-family: var(--display);
+    font-size: 2rem;
+    font-weight: 700;
+}
+.of-app.pluggy {
+    background: oklch(55% 0.2 290);
+    color: white;
+}
+.of-wire {
+    display: grid;
+    place-items: center;
+    width: 64px;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--brand) 0 6px, transparent 6px 11px);
+    color: var(--brand);
+}
+.of-wire .ms {
+    padding: 0.2rem;
+    border-radius: 50%;
+    background: var(--sunk);
+}
+.of-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.7rem;
+    border-radius: 99px;
+    background: var(--surface);
+    font-size: 0.78rem;
+    font-weight: 650;
+    color: var(--in-text);
+}
+/* passo 4: conta do banco → conta do grana */
+.of-map {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(100%, 300px);
+}
+.of-map-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 14px;
+    background: var(--surface);
+    font-size: 0.85rem;
+}
+.of-map-row span {
+    flex: 1;
+    min-width: 0;
+    color: var(--ink-2);
+}
+.of-map-row b {
+    padding: 0.15rem 0.5rem;
+    border-radius: 8px;
+    background: color-mix(in oklch, var(--lime) 30%, var(--surface));
+    color: light-dark(var(--on-lime), var(--ink));
+    white-space: nowrap;
+}
+
+/* ───────── celular: cards mais suaves (como o Organizze) ─────────
+   Mesmo número de cards, mas sem borda dura nem sombra: só o fundo um tom acima da página.
+   No claro fica um fio bem leve (o fundo quase não difere do papel); caixas internas no mesmo tom suave. */
+@media (max-width: 560px) {
+    .panel {
+        border-color: light-dark(color-mix(in oklch, var(--line) 55%, transparent), transparent);
+        box-shadow: none;
+        border-radius: 18px;
+    }
+    .pace-stats,
+    .cards-total,
+    .inv-break {
+        background: color-mix(in oklch, var(--sunk) 55%, var(--surface));
     }
 }

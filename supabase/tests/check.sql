@@ -52,6 +52,9 @@ begin
   -- mudar data recalcula fatura
   update transactions set date = '2026-10-20' where description = 'CARREFOUR';
   assert (select invoice_date from transactions where description = 'CARREFOUR') = '2026-11-05', 'recalcula fatura';
+
+  -- soma do que mexeu na conta depois de uma data (saldo de cada dia em Lançamentos): só pagos
+  assert paid_sum_after(array[acc], '2026-10-31') = -9616, 'soma depois da data';
 end $$;
 
 -- RLS: usuário B não vê nada do A
@@ -59,6 +62,22 @@ set local request.jwt.claims = '{"sub":"00000000-0000-0000-0000-000000000002","r
 do $$ begin
   assert (select count(*) from transactions) = 0, 'RLS transactions';
   assert (select count(*) from account_balances) = 0, 'RLS view';
+end $$;
+
+-- Avisos (só o service_role chama): crédito de pagamento a mais cobre a fatura seguinte, sem aviso de cobrança
+reset role;
+do $$
+declare
+  u uuid := '00000000-0000-0000-0000-000000000001';
+  acc uuid := (select id from accounts where user_id = u and name = 'Bradesco');
+  card uuid := (select id from cards where user_id = u and name = 'Bradesco');
+begin
+  assert exists (select 1 from push_reminders('2026-11-05') where tag = 'fatura-' || card and body = 'R$ 16,15 a pagar'),
+    'avisa fatura com saldo a pagar';
+  insert into transactions (user_id, description, amount, date, account_id, pays_card_id, invoice_date)
+  values (u, 'pagou a mais', -21615, '2026-11-05', acc, card, '2026-11-05');
+  insert into transactions (user_id, description, amount, date, card_id) values (u, 'compra dez', -5000, '2026-11-10', card);
+  assert not exists (select 1 from push_reminders('2026-12-05') where tag = 'fatura-' || card), 'crédito cobre a fatura: sem aviso';
 end $$;
 
 select 'OK' as check;

@@ -1,6 +1,9 @@
 import { Component, DestroyRef, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Store, Tx, addMonths, brl, catIcon, invoiceDue, must, notify, offerPush, onBack, sb, today, suggestPrefs } from '../../core';
+import { Router } from '@angular/router';
+import { Store, Tx, addMonths, brl, catIcon, must, notify, offerPush, onBack, sb, today, suggestPrefs } from '../../core';
+import { invoiceDue } from '../cards/invoice';
+import { offerBank } from '../banks/pluggy';
 import { ChipOption, ChipSelect, DatePick, Keypad, Money } from '../../shared/ui/fields';
 import { Icon } from '../../shared/ui/icon';
 import { SheetDrag } from '../../shared/ui/sheet';
@@ -26,7 +29,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
             <!-- celular: arrastar o cabeçalho para baixo fecha (como folha nativa) -->
             <div class="tx-head" [gSheetDrag]="sheet" (dismissed)="closed.emit(null)">
                 <div class="row between">
-                    @if (!draft().id) {
+                    @if (!draft().id && !inv()) {
                         <div class="tx-tabs" role="tablist" aria-label="Tipo">
                             <button
                                 type="button"
@@ -93,58 +96,62 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
 
             <div class="body tx-body" (pointerdown)="keypad.set(false)">
                 @if (kind() !== 'transfer') {
-                    <label class="tx-row"
-                        ><span class="lbl">Descrição</span>
-                        <span class="tx-val"
-                            ><g-icon name="edit" class="muted" /><input
-                                class="bare"
-                                name="d"
-                                [(ngModel)]="f.description"
-                                (ngModelChange)="suggestSoon()"
-                                required
-                                placeholder="Adicione a descrição"
-                                autocomplete="off"
-                        /></span>
-                    </label>
-                    @if (descHints().length) {
-                        <!-- descrições já usadas (Organizze): toque preenche descrição e categoria -->
-                        <div class="desc-hints" role="listbox" aria-label="Descrições usadas antes">
-                            @for (h of descHints(); track h.description) {
-                                <button type="button" role="option" aria-selected="false" (click)="useDesc(h)">
-                                    <span class="ms">history</span><b>{{ h.description }}</b>
-                                    @if (store.catById().get(h.category_id ?? ''); as c) {
-                                        <span class="muted">{{ c.name }}</span>
-                                    }
-                                </button>
-                            }
+                    @if (!inv()) {
+                        <label class="tx-row"
+                            ><span class="lbl">Descrição</span>
+                            <span class="tx-val"
+                                ><g-icon name="edit" class="muted" /><input
+                                    class="bare"
+                                    name="d"
+                                    [(ngModel)]="f.description"
+                                    (ngModelChange)="suggestSoon()"
+                                    required
+                                    placeholder="Adicione a descrição"
+                                    autocomplete="off"
+                            /></span>
+                        </label>
+                        @if (descHints().length) {
+                            <!-- descrições já usadas (Organizze): toque preenche descrição e categoria -->
+                            <div class="desc-hints" role="listbox" aria-label="Descrições usadas antes">
+                                @for (h of descHints(); track h.description) {
+                                    <button type="button" role="option" aria-selected="false" (click)="useDesc(h)">
+                                        <span class="ms">history</span><b>{{ h.description }}</b>
+                                        @if (store.catById().get(h.category_id ?? ''); as c) {
+                                            <span class="muted">{{ c.name }}</span>
+                                        }
+                                    </button>
+                                }
+                            </div>
+                        }
+                        @if (hints().length && !f.category_id) {
+                            <div class="suggest-row">
+                                <g-icon name="auto_awesome" [size]="16" />
+                                @for (h of hints(); track h.id) {
+                                    <button type="button" class="suggest" (click)="f.category_id = h.id; hints.set([])">
+                                        {{ h.name }}
+                                    </button>
+                                }
+                            </div>
+                        }
+                        <div class="tx-row">
+                            <span class="lbl">Categoria</span>
+                            <g-chip-select
+                                variant="row"
+                                label="Categoria"
+                                placeholder="Sem categoria"
+                                [options]="catOptions()"
+                                [(value)]="f.category_id"
+                                createLabel="Nova categoria"
+                                (create)="newCat($event)"
+                            />
                         </div>
                     }
-                    @if (hints().length && !f.category_id) {
-                        <div class="suggest-row">
-                            <g-icon name="auto_awesome" [size]="16" />
-                            @for (h of hints(); track h.id) {
-                                <button type="button" class="suggest" (click)="f.category_id = h.id; hints.set([])">{{ h.name }}</button>
-                            }
-                        </div>
-                    }
-                    <div class="tx-row">
-                        <span class="lbl">Categoria</span>
-                        <g-chip-select
-                            variant="row"
-                            label="Categoria"
-                            placeholder="Sem categoria"
-                            [options]="catOptions()"
-                            [(value)]="f.category_id"
-                            createLabel="Nova categoria"
-                            (create)="newCat($event)"
-                        />
-                    </div>
                     <div class="tx-row">
                         <span class="lbl">{{ kind() === 'income' ? 'Recebido em' : 'Pago com' }}</span>
                         <g-chip-select
                             variant="row"
                             [label]="kind() === 'income' ? 'Recebido em' : 'Pago com'"
-                            [options]="originOptions()"
+                            [options]="inv() ? accountOptions('a:') : originOptions()"
                             [(value)]="f.origin"
                             [clearable]="false"
                             fallbackIcon="account_balance"
@@ -184,7 +191,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                 <div class="tx-row"><span class="lbl">Data</span><g-date [(value)]="f.date" /></div>
 
                 @if (kind() !== 'transfer') {
-                    @if (!draft().id) {
+                    @if (!draft().id && !inv()) {
                         <div class="tx-row">
                             <span class="lbl">Repetir lançamento</span>
                             <div class="row wrap">
@@ -278,39 +285,35 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                                         placeholder="Opcional"
                                     ></textarea></span
                             ></label>
-                            @if (store.v2()) {
-                                <div class="tx-row">
-                                    <span class="lbl">Anexos</span>
-                                    <div class="att-list">
-                                        @for (a of f.attachments; track a) {
-                                            <span class="att"
-                                                ><button type="button" (click)="openAtt(a)" [title]="'Abrir ' + attName(a)">
-                                                    <g-icon [name]="a.endsWith('.pdf') ? 'description' : 'image'" [size]="18" />{{
-                                                        attName(a)
-                                                    }}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    class="att-x"
-                                                    (click)="f.attachments = f.attachments.filter((x) => x !== a)"
-                                                    [attr.aria-label]="'Tirar ' + attName(a)"
-                                                >
-                                                    <g-icon name="close" [size]="16" /></button
-                                            ></span>
-                                        }
-                                        <label class="btn ghost att-add"
-                                            ><g-icon name="attach_file" [size]="18" />{{ uploading() ? 'Enviando…' : 'Adicionar anexo' }}
-                                            <input
-                                                type="file"
-                                                accept="image/*,application/pdf"
-                                                multiple
-                                                hidden
-                                                (change)="upload($event)"
-                                                [disabled]="uploading()"
-                                        /></label>
-                                    </div>
+                            <div class="tx-row">
+                                <span class="lbl">Anexos</span>
+                                <div class="att-list">
+                                    @for (a of f.attachments; track a) {
+                                        <span class="att"
+                                            ><button type="button" (click)="openAtt(a)" [title]="'Abrir ' + attName(a)">
+                                                <g-icon [name]="a.endsWith('.pdf') ? 'description' : 'image'" [size]="18" />{{ attName(a) }}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                class="att-x"
+                                                (click)="f.attachments = f.attachments.filter((x) => x !== a)"
+                                                [attr.aria-label]="'Tirar ' + attName(a)"
+                                            >
+                                                <g-icon name="close" [size]="16" /></button
+                                        ></span>
+                                    }
+                                    <label class="btn ghost att-add"
+                                        ><g-icon name="attach_file" [size]="18" />{{ uploading() ? 'Enviando…' : 'Adicionar anexo' }}
+                                        <input
+                                            type="file"
+                                            accept="image/*,application/pdf"
+                                            multiple
+                                            hidden
+                                            (change)="upload($event)"
+                                            [disabled]="uploading()"
+                                    /></label>
                                 </div>
-                            }
+                            </div>
                         </div>
                     </div>
                 }
@@ -333,7 +336,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                         <button type="button" class="btn ghost icon danger" (click)="remove()" aria-label="Excluir" title="Excluir">
                             <g-icon name="delete" [size]="22" />
                         </button>
-                        @if (kind() !== 'transfer') {
+                        @if (kind() !== 'transfer' && !inv()) {
                             <button
                                 type="button"
                                 class="btn ghost icon"
@@ -347,7 +350,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                     }
                 </div>
                 <div class="row">
-                    @if (!draft().id) {
+                    @if (!draft().id && !inv()) {
                         <button type="button" class="btn ghost" [disabled]="busy()" (click)="save(true)" title="Salvar e lançar outro">
                             + Outro
                         </button>
@@ -360,6 +363,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
 })
 export class TxForm implements OnInit {
     store = inject(Store);
+    router = inject(Router);
     draft = input<TxDraft>({});
     /** id do primeiro lançamento salvo, ou null se cancelou/excluiu */
     /** fecha o formulário: id salvo, ou null se cancelou (não usa "close", que é evento nativo) */
@@ -395,6 +399,8 @@ export class TxForm implements OnInit {
     per = (n: number) => Math.floor(this.f.cents / n);
     first = (n: number) => this.f.cents - this.per(n) * (n - 1);
     uploading = signal(false);
+    /** enviados nesta abertura e ainda não salvos: saem do Storage se o formulário fechar sem salvar */
+    private uploaded: string[] = [];
     attName = (p: string) =>
         p
             .split('/')
@@ -419,6 +425,7 @@ export class TxForm implements OnInit {
                     continue;
                 }
                 this.f.attachments = [...this.f.attachments, path];
+                this.uploaded.push(path);
             }
         } finally {
             this.uploading.set(false);
@@ -433,8 +440,14 @@ export class TxForm implements OnInit {
 
     accounts = computed(() => this.store.accounts().filter((a) => !a.archived));
     cards = computed(() => this.store.cards().filter((c) => !c.archived));
-    title = computed(
-        () => (this.draft().id ? 'Editar ' : 'Nova ') + { expense: 'despesa', income: 'receita', transfer: 'transferência' }[this.kind()],
+    /** pagamento de fatura (aberto em Cartões, como no Organizze): só valor, conta, data e anexos */
+    inv = computed(() => !!this.draft().pays_card_id);
+    title = computed(() =>
+        this.inv()
+            ? this.draft().id
+                ? 'Pagamento de fatura'
+                : 'Pagar fatura ' + (this.store.originName().get(this.draft().pays_card_id!) ?? '').trim()
+            : (this.draft().id ? 'Editar ' : 'Nova ') + { expense: 'despesa', income: 'receita', transfer: 'transferência' }[this.kind()],
     );
 
     constructor() {
@@ -449,7 +462,10 @@ export class TxForm implements OnInit {
                 arm();
             }));
         arm();
-        inject(DestroyRef).onDestroy(() => this.unback());
+        inject(DestroyRef).onDestroy(() => {
+            this.unback();
+            void this.store.dropUnusedFiles(this.uploaded);
+        });
     }
     private unback = () => {};
 
@@ -576,6 +592,8 @@ export class TxForm implements OnInit {
 
     setKind(k: TxKind) {
         this.kind.set(k);
+        // transferência sai de uma conta: o cartão escolhido antes vira a primeira conta
+        if (k === 'transfer' && this.f.origin.startsWith('c:')) this.f.origin = this.accounts()[0] ? 'a:' + this.accounts()[0].id : '';
         if (this.f.category_id && this.store.catById().get(this.f.category_id)?.kind !== (k === 'income' ? 'income' : 'expense'))
             this.f.category_id = '';
     }
@@ -744,6 +762,7 @@ export class TxForm implements OnInit {
                     notes: this.f.notes || null,
                     paid: card_id ? true : this.f.paid,
                     ...(this.f.attachments.length || d.attachments?.length ? { attachments: this.f.attachments } : {}),
+                    ...(d.pays_card_id ? { pays_card_id: d.pays_card_id, invoice_date: d.invoice_date } : {}),
                 };
                 if (d.id) {
                     await must(
@@ -774,10 +793,31 @@ export class TxForm implements OnInit {
                 }
             }
             await this.store.load();
+            // anexo tirado (ou enviado e não salvo, como na transferência): sai do Storage se nenhum lançamento usa
+            void this.store.dropUnusedFiles([...(d.attachments ?? []), ...this.uploaded]);
+            this.uploaded = [];
             // conta a pagar/receber: momento natural de oferecer o aviso no vencimento
             const bill = !d.id && this.kind() !== 'transfer' && !!account_id && (!this.f.paid || this.f.repeat === 'fixo');
-            if (!(bill && offerPush('Salvo. Quer um aviso no dia do vencimento?')))
-                notify(d.id ? 'Alterações salvas' : this.kind() === 'transfer' ? 'Transferência registrada' : 'Lançamento salvo');
+            // lançou à mão sem banco conectado: momento natural de mostrar que dá para chegar sozinho (Open Finance)
+            const manual = !d.id && !this.inv() && this.kind() !== 'transfer' && (d.source ?? 'manual') === 'manual';
+            if (
+                !(bill && offerPush('Salvo. Quer um aviso no dia do vencimento?')) &&
+                !(
+                    manual &&
+                    offerBank('Salvo. Quer que os lançamentos cheguem sozinhos do banco? Conecte pelo Open Finance, grátis.', () =>
+                        this.router.navigate(['/ajustes'], { fragment: 'bancos' }),
+                    )
+                )
+            )
+                notify(
+                    d.id
+                        ? 'Alterações salvas'
+                        : this.inv()
+                          ? 'Fatura paga. Limite liberado.'
+                          : this.kind() === 'transfer'
+                            ? 'Transferência registrada'
+                            : 'Lançamento salvo',
+                );
             if (d.id && this.kind() !== 'transfer' && this.f.category_id && this.f.category_id !== d.category_id)
                 void this.store.offerSameDesc({ id: d.id, description: this.f.description }, this.f.category_id);
             if (another) {

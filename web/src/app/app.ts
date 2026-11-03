@@ -5,7 +5,7 @@ import { Store, Theme, asking, authError, enablePush, hidden, notify, onBack, sb
 import { Icon } from './shared/ui/icon';
 import { SheetDrag } from './shared/ui/sheet';
 import { TxForm } from './features/transactions/tx-form';
-import { pluggySync } from './features/banks/open-finance';
+import { bankCount, pluggySync } from './features/banks/pluggy';
 
 const NAV = [
     { to: '/', label: 'Início', icon: 'home', exact: true },
@@ -421,6 +421,7 @@ export class App {
             this.synced = true;
             void enablePush(true);
             const { data } = await sb.from('pluggy_items').select('last_sync_at');
+            if (data) bankCount.set(data.length);
             const stale = (data ?? []).some((i) => !i.last_sync_at || Date.now() - Date.parse(i.last_sync_at) > 12 * 3600e3);
             if (stale && (await pluggySync())) await this.store.load();
         });

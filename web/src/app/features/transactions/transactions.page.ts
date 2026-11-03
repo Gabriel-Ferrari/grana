@@ -17,6 +17,7 @@ import {
     today,
     swr,
     cached,
+    allRows,
 } from '../../core';
 import { Icon } from '../../shared/ui/icon';
 import { ChipOption, ChipSelect } from '../../shared/ui/fields';
@@ -700,10 +701,13 @@ export class Transactions {
 
     async fetch(month: string, until: string, origin: string) {
         this.sel.set(this.empty);
-        let q = sb.from('transactions').select('*').gte('date', month).lte('date', until);
         const [t, id] = origin.split(':');
-        if (t === 'a') q = q.eq('account_id', id);
-        if (t === 'c') q = q.eq('card_id', id);
+        const page = (a: number, b: number) => {
+            let q = sb.from('transactions').select('*').gte('date', month).lte('date', until);
+            if (t === 'a') q = q.eq('account_id', id);
+            if (t === 'c') q = q.eq('card_id', id);
+            return q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id').range(a, b);
+        };
         const end = until;
         const ids = [...this.accIds()];
         const key = `tx:${month}:${until}:${origin}:${ids.join(',')}`;
@@ -712,7 +716,7 @@ export class Transactions {
             key,
             () =>
                 Promise.all([
-                    must(q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id')),
+                    allRows<Tx>(page),
                     must(sb.from('invoices').select('*').gte('invoice_date', addMonths(month, -2)).lte('invoice_date', end)),
                     must(
                         sb
@@ -723,12 +727,10 @@ export class Transactions {
                             .lte('date', end),
                     ),
                     // o que mexeu nas contas depois do período (para voltar do saldo de hoje até o fim de cada dia)
-                    ids.length
-                        ? must(sb.from('transactions').select('amount').eq('paid', true).in('account_id', ids).gt('date', end))
-                        : Promise.resolve([]),
+                    ids.length ? must(sb.rpc('paid_sum_after', { p_accounts: ids, p_after: end })) : Promise.resolve(0),
                 ]),
             ([rows, invs, pend, after]) => {
-                this.afterSum.set((after as { amount: number }[]).reduce((s, r) => s + r.amount, 0));
+                this.afterSum.set(after as number);
                 this.rows.set(rows as Tx[]);
                 this.invs.set(invs as Inv[]);
                 this.pend.set(pend as { amount: number; account_id: string }[]);
