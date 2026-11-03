@@ -1,4 +1,16 @@
-import { Component, DestroyRef, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
+import {
+    Component,
+    DestroyRef,
+    ElementRef,
+    OnInit,
+    afterNextRender,
+    computed,
+    inject,
+    input,
+    output,
+    signal,
+    viewChild,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Store, Tx, addMonths, brl, catIcon, must, notify, offerPush, onBack, sb, today, suggestPrefs } from '../../core';
@@ -377,6 +389,7 @@ export class TxForm implements OnInit {
     hints = signal<{ id: string; name: string }[]>([]);
     topCats = signal<string[]>([]);
     money = viewChild(Money);
+    sheet = viewChild.required<ElementRef<HTMLElement>>('sheet');
     fmt = (c: number) => brl(Math.round(c));
     private timer?: ReturnType<typeof setTimeout>;
 
@@ -462,7 +475,22 @@ export class TxForm implements OnInit {
                 arm();
             }));
         arm();
+        // celular: o teclado do sistema cobre o fim da folha (e as sugestões de descrição). A folha passa a terminar
+        // em cima dele; com o teclado aberto o topo fica compacto (classe kb).
+        const vv = visualViewport;
+        const fit = () => {
+            const kb = Math.max(0, Math.round(innerHeight - vv!.height - vv!.offsetTop));
+            const el = this.sheet().nativeElement;
+            el.style.setProperty('--kb', kb + 'px');
+            el.classList.toggle('kb', kb > 80);
+        };
+        if (vv && this.mobile) {
+            vv.addEventListener('resize', fit);
+            vv.addEventListener('scroll', fit);
+        }
         inject(DestroyRef).onDestroy(() => {
+            vv?.removeEventListener('resize', fit);
+            vv?.removeEventListener('scroll', fit);
             this.unback();
             void this.store.dropUnusedFiles(this.uploaded);
         });
