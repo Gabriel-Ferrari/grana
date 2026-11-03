@@ -31,9 +31,15 @@ no Android e importação via **Open Finance** (MeuPluggy).
   atrasados, 50/30/20.
 - **Lançamentos**: despesa, receita, transferência, parcelas e fixos; teclado com calculadora; filtros, busca,
   seleção em lote, arrastar para marcar pago/excluir, desfazer; sugestão de descrição e categoria.
-- **Cartões**: limite disponível, faturas por mês, pagamento de fatura.
-- **Relatórios** (categorias, balanço, tags, recorrentes), **Balanço** diário e **Limites** por categoria.
+- **Cartões**: limite disponível, faturas por mês com crédito/saldo anterior, **Pagar fatura** como no Organizze (folha
+  com valor, conta, data e anexo), **Novo cartão** / **Editar cartão** na própria tela.
+- **Relatórios** (categorias, balanço, tags, recorrentes), **Balanço** diário e **Limites** por categoria. No celular,
+  tocar no gráfico mostra a categoria e o valor (a rosca mostra no centro); no desktop, clicar abre os lançamentos.
 - **Revisar**: fila dos lançamentos que chegaram sozinhos (notificação/Open Finance).
+- **Avisos no celular** (Web Push, 08:00): conta a pagar/receber do dia, fatura vencendo ou fechando, limite perto ou
+  estourado e, às segundas, o que ficou atrasado.
+- **Bancos conectados** (Open Finance via MeuPluggy): passo a passo ilustrado ao conectar e convite no momento certo
+  (depois de um lançamento à mão ou de criar uma conta, no máximo a cada 14 dias).
 - Tema claro/escuro, ocultar valores, atalhos de teclado no desktop.
 
 **Stack:** Angular (signals, standalone) · Supabase (Postgres + RLS, Auth, Edge Functions, cron) · Cloudflare Workers ·
@@ -50,6 +56,8 @@ Angular (Cloudflare Workers) ── supabase-js + login Google ─────�
 | `supabase/migrations` | schema, regras de fatura, views de saldo/fatura/relatório, RLS, categorias padrão |
 | `supabase/functions/ingest` | recebe notificações, parser (`parser.ts`) |
 | `supabase/functions/pluggy` | Open Finance (MeuPluggy): token do widget e sincronização (`map.ts`) |
+| `supabase/functions/remind` | avisos no celular (Web Push): cron diário e botão de teste |
+| `supabase/tests/check.sql` | testes do banco: regra de fatura, saldo, RLS, avisos (roda em transação, rollback no fim) |
 | `web/` | app Angular (estrutura abaixo) |
 | `android/` | app Android "grana": app web em tela cheia (TWA/Chrome) + coletor de notificações (Kotlin) |
 | `scripts/import-organizze.mjs` | migra seus dados do Organizze (API v2), idempotente |
@@ -63,14 +71,15 @@ shared/banks.ts  catálogo de bancos/bandeiras e logo
 features/
   home/          visão geral (ritmo, para onde foi, a pagar, 50/30/20)
   transactions/  lista, filtros, períodos, seleção em lote, formulário (tx-form)
-  cards/         cartões e faturas (invoice.ts: situação da fatura)
+  cards/         cartões e faturas (invoice.ts: regra da fatura, igual à do banco, e situação)
   reports/       relatórios, balanço, tags, recorrentes (recurring.ts)
   budgets/       limites de gastos
   notifications/ notificações coletadas no celular
   settings/      contas, cartões, categorias, tags, segurança
-  banks/         Open Finance (conectar bancos)
+  banks/         Open Finance: tela e guia (open-finance.ts); sincronizar e convite (pluggy.ts, leve)
 ```
-Regras: `features/*` só importam de `core` e `shared`; `shared` não importa de `features`.
+Regras: `features/*` importam de `core` e `shared`; de outra feature, só arquivos sem tela (`cards/invoice.ts`,
+`banks/pluggy.ts`). `shared` não importa de `features`.
 Código: 4 espaços, Prettier + ESLint (angular-eslint, acessibilidade nos templates):
 `cd web && npm run lint && npm run format:check` (`npm run format` corrige).
 
@@ -83,7 +92,7 @@ cd web && npm i && npx ng serve          # http://localhost:4200 (login dev por 
 Testes: `cd web && npm test` e
 `docker exec -i supabase_db_grana psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/check.sql`.
 
-Testes de tela (Playwright, 7 roteiros / ~100 verificações, celular e desktop) contra o app local
+Testes de tela (Playwright, 9 roteiros / ~140 verificações, celular e desktop) contra o app local
 (`ng serve` + Supabase local com o usuário dev abaixo): `cd web && npm run e2e` (ou `npm run e2e -- lacunas`
 para um só). Prints vão para `/tmp/grana-e2e`. Variáveis: `TARGET_URL`, `TEST_EMAIL`, `TEST_PASSWORD`, `OUT_DIR`.
 
@@ -102,7 +111,17 @@ Produção atual: Supabase `mfsblnrygzwdefvnezas`, Google Cloud `grana-513513`, 
 ### 1. Supabase
 1. Crie um projeto em supabase.com (região São Paulo).
 2. `npx supabase login && npx supabase link --project-ref SEU_REF`
-3. `npx supabase db push --remote` e `npx supabase functions deploy ingest --no-verify-jwt`
+3. Banco: `npx supabase db push --remote`.
+4. Funções: `npx supabase functions deploy ingest --no-verify-jwt`, `npx supabase functions deploy pluggy` e
+   `npx supabase functions deploy remind`.
+5. Segredos (`npx supabase secrets set …`): `PLUGGY_CLIENT_ID` e `PLUGGY_CLIENT_SECRET` (veja `docs/pluggy.md`) e
+   `VAPID_KEYS` (par de chaves dos avisos em JWK, gerado com `exportVapidKeys` do `@negrel/webpush`; a chave pública vai
+   em `vapidPublic` de `web/src/env*.ts`).
+6. Crons (sincronização 07:00, avisos 08:00): no SQL Editor rode uma vez
+   `select vault.create_secret('<service_role key>', 'grana_service_role');`. Tem que ser a mesma chave de
+   `SUPABASE_SERVICE_ROLE_KEY`: as funções `pluggy` e `remind` comparam com ela. Sem isso, nada roda sozinho.
+   A URL do projeto está fixa nos agendamentos (`20261102060000_pluggy.sql` e `20261102100000_push.sql`): troque se
+   usar outro projeto.
 
 ### 2. Login com Google
 1. console.cloud.google.com → APIs e serviços → Tela de consentimento OAuth: Externo; adicione seu Gmail como usuário de teste
@@ -116,7 +135,8 @@ Produção atual: Supabase `mfsblnrygzwdefvnezas`, Google Cloud `grana-513513`, 
 
 ### 3. Frontend (Cloudflare Workers, assets estáticos — grátis)
 1. `web/src/env.prod.ts` tem Project URL + publishable key (públicas; RLS protege os dados).
-2. `cd web && npm run deploy` (build + `wrangler deploy`; config em `web/wrangler.jsonc`, SPA fallback ligado).
+2. `cd web && npm run deploy` (build + `wrangler deploy`; config em `web/wrangler.jsonc`, SPA fallback ligado; leva junto o
+   `grana.apk` se ele já estiver compilado). **Sempre depois do `db push`**: o app chama funções SQL das migrations novas.
 3. No ar: https://grana.ferrari-gabriel2002.workers.dev — Site URL e Redirect URL (`…/**`) já cadastrados no Supabase.
 
 ### 4. Celular
@@ -142,6 +162,8 @@ A tela do coletor não tem ícone: **toque longo em grana → Configurar coletor
 5. Em **Ajustes** do app web, preencha em cada conta/cartão o **app que notifica** e o **final do cartão**.
    Com isso as notificações viram lançamentos automáticos; o que não casar fica em **Notificações** para revisar.
    Quando um banco mandar um formato que o parser não entende, copie o texto para `parser.test.ts` e ajuste `parser.ts`.
+6. Avisos: **Ajustes → Avisos no celular → Ativar avisos** e depois **Enviar teste**. O aviso chega como notificação do
+   Chrome (site grana); se não chegar, confira se o Chrome pode mostrar notificações.
 
 ### 5. Migrar do Organizze
 Token em app.organizze.com.br/configuracoes/api-keys, depois:
@@ -153,8 +175,8 @@ SUPABASE_SERVICE_ROLE_KEY=... GRANA_EMAIL=seu@gmail.com node scripts/import-orga
 ## Cuidados do plano grátis
 - Supabase pausa o projeto após **7 dias sem atividade** — o coletor enviando notificações mantém ativo.
 - Plano grátis não tem backup automático: rode `npx supabase db dump --data-only > backup.sql` de vez em quando.
-- Relatórios buscam linhas cruas (limite padrão de 1000 por consulta no Supabase) — se um período tiver mais que isso,
-  troque por uma função SQL agregada.
+- A API do Supabase devolve no máximo 1000 linhas por consulta: relatórios e saldos usam funções SQL agregadas, e as
+  listas longas (Lançamentos, recorrentes) buscam em páginas de 1000 (`allRows` em `web/src/app/core/supabase.ts`).
 
 ## Opções de banco gratuito avaliadas
 | Opção | Grátis | Prós | Contras |

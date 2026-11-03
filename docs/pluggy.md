@@ -36,6 +36,7 @@ que é gratuito para uso pessoal. Atualiza 1× por dia (a notificação do celul
 - Pagamento de fatura na conta vira pagamento do cartão do mesmo banco (não conta como gasto em dobro);
   "pagamento recebido" no cartão é ignorado.
 - Categoria: a última usada com a mesma descrição; senão, a categoria da Pluggy traduzida.
-- Pendentes (`PENDING`) são ignorados até virarem `POSTED`.
+- Compras pendentes (`PENDING`) do cartão dos últimos 45 dias entram (são a fatura aberta); quando o banco confirma com
+  outro valor ou cancela, a pendente sai sozinha na próxima sincronização.
 - A autorização do Open Finance vale até 12 meses; quando vencer, o status muda e basta conectar de novo.
 - Cada conta do grana tem suas próprias conexões (RLS por usuário).
