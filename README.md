@@ -80,7 +80,7 @@ npx supabase start -x studio,imgproxy,vector,logflare,realtime,postgres-meta,sup
 npx supabase functions serve            # outro terminal
 cd web && npm i && npx ng serve          # http://localhost:4200 (login dev por e-mail/senha)
 ```
-Testes: `node --test supabase/functions/ingest/parser.test.ts supabase/functions/pluggy/map.test.ts web/src/app/features/*/*.spec.ts` e
+Testes: `cd web && npm test` e
 `docker exec -i supabase_db_grana psql -U postgres -v ON_ERROR_STOP=1 < supabase/tests/check.sql`.
 
 Testes de tela (Playwright, 7 roteiros / ~100 verificações, celular e desktop) contra o app local

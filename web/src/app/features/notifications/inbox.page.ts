@@ -122,10 +122,12 @@ interface Device {
                             <div class="title">{{ d.name }}</div>
                             <div class="sub">último envio: {{ d.last_seen_at ? (d.last_seen_at | date: 'dd/MM HH:mm') : 'nunca' }}</div>
                         </div>
-                        <a class="btn lime" [href]="setupLink(d.token)"><g-icon name="link" [size]="18" />Configurar no app</a>
-                        <button class="btn ghost icon" (click)="removeDevice(d.token)" aria-label="Desconectar">
-                            <g-icon name="delete" [size]="18" />
-                        </button>
+                        <div class="item-actions">
+                            <a class="btn lime" [href]="setupLink(d.token)"><g-icon name="link" [size]="18" />Configurar no app</a>
+                            <button class="btn ghost icon" (click)="removeDevice(d.token)" aria-label="Desconectar">
+                                <g-icon name="delete" [size]="18" />
+                            </button>
+                        </div>
                     </div>
                 } @empty {
                     <div class="empty-state">

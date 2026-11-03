@@ -99,49 +99,70 @@ async function syncUser(user_id: string, key: string) {
                         }),
                     )
                     .filter((r): r is NonNullable<typeof r> => !!r);
-                if (!rows.length) continue;
+                if (rows.length) {
+                    // categoria: a última usada com a mesma descrição; senão a categoria da Pluggy traduzida
+                    for (const r of rows) {
+                        if (r.pays_card_id || r.transfer_id) continue;
+                        const { data: prev } = await db
+                            .from('transactions')
+                            .select('category_id')
+                            .eq('user_id', user_id)
+                            .ilike('description', r.description.replace(/[%_\\]/g, '\\$&'))
+                            .not('category_id', 'is', null)
+                            .order('created_at', { ascending: false })
+                            .limit(1)
+                            .maybeSingle();
+                        r.category_id =
+                            prev?.category_id ?? mapCategory(r._pluggyCategory, r.amount > 0 ? 'income' : 'expense', cats ?? []);
+                    }
 
-                // categoria: a última usada com a mesma descrição; senão a categoria da Pluggy traduzida
-                for (const r of rows) {
-                    if (r.pays_card_id || r.transfer_id) continue;
-                    const { data: prev } = await db
+                    // reconcilia com o que já veio por notificação/manual (mesmo valor, ±2 dias, sem ext_id)
+                    const dates = rows.map((r) => r.date).sort();
+                    const lo = brDate(new Date(Date.parse(dates[0]) - 2 * 864e5).toISOString()),
+                        hi = brDate(new Date(Date.parse(dates.at(-1)!) + 2 * 864e5).toISOString());
+                    let q = db
                         .from('transactions')
-                        .select('category_id')
+                        .select('id, amount, date, ext_id')
                         .eq('user_id', user_id)
-                        .ilike('description', r.description.replace(/[%_\\]/g, '\\$&'))
-                        .not('category_id', 'is', null)
-                        .limit(1)
-                        .maybeSingle();
-                    r.category_id = prev?.category_id ?? mapCategory(r._pluggyCategory, r.amount > 0 ? 'income' : 'expense', cats ?? []);
+                        .gte('date', lo)
+                        .lte('date', hi);
+                    q = m.card_id ? q.eq('card_id', m.card_id) : q.eq('account_id', m.account_id);
+                    const { data: existing } = await q;
+                    const { merges, inserts, skipped, confirmed } = reconcile(rows, existing ?? []);
+                    out.skipped += skipped;
+                    // o banco confirmou: o que estava "a pagar" vira pago
+                    if (confirmed.length) await db.from('transactions').update({ paid: true }).in('id', confirmed).eq('paid', false);
+                    for (const mg of merges) {
+                        await db
+                            .from('transactions')
+                            .update({ ext_id: mg.ext_id })
+                            .eq('id', mg.id)
+                            .or('ext_id.is.null,ext_id.like.pluggy:pending:*');
+                    }
+                    out.merged += merges.length;
+                    if (inserts.length) {
+                        const clean = inserts.map(({ _pluggyCategory, ...r }) => r);
+                        const { data: ins, error } = await db
+                            .from('transactions')
+                            .upsert(clean, { onConflict: 'user_id,ext_id', ignoreDuplicates: true })
+                            .select('id');
+                        if (error) throw new Error(error.message);
+                        out.inserted += ins?.length ?? 0;
+                    }
                 }
-
-                // reconcilia com o que já veio por notificação/manual (mesmo valor, ±2 dias, sem ext_id)
-                const dates = rows.map((r) => r.date).sort();
-                const lo = brDate(new Date(Date.parse(dates[0]) - 2 * 864e5).toISOString()),
-                    hi = brDate(new Date(Date.parse(dates.at(-1)!) + 2 * 864e5).toISOString());
-                let q = db.from('transactions').select('id, amount, date, ext_id').eq('user_id', user_id).gte('date', lo).lte('date', hi);
-                q = m.card_id ? q.eq('card_id', m.card_id) : q.eq('account_id', m.account_id);
-                const { data: existing } = await q;
-                const { merges, inserts, skipped, confirmed } = reconcile(rows, existing ?? []);
-                out.skipped += skipped;
-                // o banco confirmou: o que estava "a pagar" vira pago
-                if (confirmed.length) await db.from('transactions').update({ paid: true }).in('id', confirmed).eq('paid', false);
-                for (const mg of merges) {
-                    await db
+                // pendente que sumiu da Pluggy (cancelado, ou confirmado com outro valor): sai do cartão.
+                // Depois do reconcile, que já juntou o pendente confirmado com o mesmo valor. Busca incompleta (path): não dá para saber.
+                if (m.card_id && !path) {
+                    const live = txs.filter((t) => t.status === 'PENDING').map((t) => `"pluggy:pending:${t.id}"`);
+                    let stale = db
                         .from('transactions')
-                        .update({ ext_id: mg.ext_id })
-                        .eq('id', mg.id)
-                        .or('ext_id.is.null,ext_id.like.pluggy:pending:*');
-                }
-                out.merged += merges.length;
-                if (inserts.length) {
-                    const clean = inserts.map(({ _pluggyCategory, ...r }) => r);
-                    const { data: ins, error } = await db
-                        .from('transactions')
-                        .upsert(clean, { onConflict: 'user_id,ext_id', ignoreDuplicates: true })
-                        .select('id');
+                        .delete()
+                        .eq('card_id', m.card_id)
+                        .like('ext_id', 'pluggy:pending:%')
+                        .gte('date', from);
+                    if (live.length) stale = stale.not('ext_id', 'in', `(${live.join(',')})`);
+                    const { error } = await stale;
                     if (error) throw new Error(error.message);
-                    out.inserted += ins?.length ?? 0;
                 }
             }
             await db.from('pluggy_items').update({ last_sync_at: new Date().toISOString(), error: null }).eq('id', it.id);
@@ -160,16 +181,9 @@ Deno.serve(async (req) => {
     const jwt = (req.headers.get('authorization') ?? '').replace(/^Bearer /i, '');
     const body = await req.json().catch(() => ({}));
 
-    // service_role (cron) pode sincronizar todos; usuário só a si mesmo
-    const role = (() => {
-        try {
-            return JSON.parse(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).role;
-        } catch {
-            return null;
-        }
-    })();
+    // service_role (cron) pode sincronizar todos; usuário só a si mesmo. Compara a chave: não depende do gateway checar o JWT.
     let userId: string | null = null;
-    if (role !== 'service_role') {
+    if (jwt !== Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')) {
         const { data, error } = await db.auth.getUser(jwt);
         if (error || !data.user) return json({ error: 'unauthorized' }, 401);
         userId = data.user.id;

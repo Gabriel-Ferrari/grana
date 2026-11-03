@@ -22,6 +22,8 @@ async function login(page, pass = PASSWORD) {
   try {
     // ───── DESKTOP ─────
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    // convite do Open Finance já mostrado: os avisos esperados ("Lançamento salvo") não são trocados por ele
+    await ctx.addInitScript(() => localStorage.setItem('grana.bank.ask', String(Date.now())));
     const page = await ctx.newPage();
     page.on('console', (m) => m.type() === 'error' && errors.push('[desktop] ' + m.text()));
     page.on('pageerror', (e) => errors.push('[desktop pageerror] ' + e.message));
@@ -65,7 +67,7 @@ async function login(page, pass = PASSWORD) {
     await page.locator('.fpop .fopt', { hasText: 'Alimentação' }).first().click();
     ok('categoria trocada na fila', (await page.locator('.rev-item', { hasText: 'PADARIA TESTE' }).locator('.fchip').innerText()).includes('Alimentação'));
     await page.locator('.rev-item', { hasText: 'PADARIA TESTE' }).locator('.rev-ok').click();
-    await page.waitForSelector('.toast >> text=revisado');
+    await page.waitForSelector('.toast >> text=aprovado');
     ok('aprovar tira da fila', (await page.locator('.rev-item').count()) === 1);
     await page.locator('.toast button', { hasText: 'Desfazer' }).click();
     await page.waitForTimeout(1200);
@@ -203,9 +205,17 @@ async function login(page, pass = PASSWORD) {
     await page.waitForSelector('.icon-grid');
     ok('seletor de ícone', (await page.locator('.icon-grid button').count()) > 30);
     ok('painel Open Finance', await page.locator('g-openfinance').isVisible());
-    ok('passo a passo Pluggy', (await page.locator('details.guide summary').innerText()).includes('Passo a passo'));
     await page.screenshot({ path: `${OUT}/d-ajustes-icone.png` });
     await page.locator('.drawer button[aria-label=Fechar]').click();
+    // passo a passo ilustrado do Open Finance (abre no lugar do widget)
+    await page.locator('g-openfinance').getByRole('button', { name: 'Conectar banco' }).click();
+    await page.waitForSelector('.of-guide');
+    ok('passo a passo Pluggy', (await page.locator('.of-step-n').innerText()).includes('Passo 1 de 4'));
+    for (let i = 0; i < 3; i++) await page.locator('.of-guide').getByRole('button', { name: /Próximo/ }).click();
+    ok('último passo conecta', await page.locator('.of-guide').getByRole('button', { name: /Conectar agora/ }).isVisible());
+    await page.screenshot({ path: `${OUT}/d-guia-banco.png` });
+    await page.locator('.of-guide').getByRole('button', { name: /Voltar/ }).click();
+    await page.locator('.ask-scrim').click({ position: { x: 5, y: 5 } });
     // seletor de banco com logos
     await page.locator('section', { hasText: 'Contas' }).first().getByRole('button', { name: 'Conta' }).click();
     await page.waitForSelector('.bank-grid');

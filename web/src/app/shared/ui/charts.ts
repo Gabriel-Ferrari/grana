@@ -12,6 +12,8 @@ import {
     inject,
     input,
     output,
+    signal,
+    untracked,
     viewChild,
 } from '@angular/core';
 import {
@@ -73,6 +75,8 @@ function alpha(rgb: string, a: number): string {
     return `rgba(${r}, ${g}, ${b}, ${a})`;
 }
 const money = (c: number, compact = true) => (hidden() ? '•••' : brl(c, compact));
+/** celular/tablet: tocar no gráfico mostra a categoria e o valor; abrir a lista fica para o mouse (e para as linhas abaixo) */
+const touch = () => matchMedia('(hover: none)').matches;
 
 /** Tema dos gráficos, relido quando o sistema troca claro/escuro. */
 function theme() {
@@ -240,9 +244,9 @@ export class RankBars {
     selector: 'g-pace',
     template: `
         <div class="legend">
-            <span><i class="key cur"></i>Este mês, até hoje</span>
-            <span><i class="key proj"></i>Previsão até o fim do mês</span>
-            <span><i class="key avg"></i>Normal (últimos 3 meses)</span>
+            <span><i class="key cur"></i>Este mês</span>
+            <span><i class="key proj"></i>Previsão</span>
+            <span><i class="key avg"></i>Normal (3 meses)</span>
         </div>
         <div class="chart-box" style="height:220px"><canvas #cv role="img" [attr.aria-label]="label()"></canvas></div>
     `,
@@ -476,7 +480,7 @@ export class Flow {
                 interaction: { mode: 'index', intersect: false },
                 onHover: (e, els) => ((e.native?.target as HTMLElement).style.cursor = els.length ? 'pointer' : 'default'),
                 onClick: (_e, els) => {
-                    if (els.length) this.pick.emit(m[els[0].index].key);
+                    if (els.length && !touch()) this.pick.emit(m[els[0].index].key);
                 },
                 scales: {
                     x: {
@@ -658,9 +662,15 @@ export class BalanceLine {
     template: `
         <div class="donut-box">
             <canvas #cv role="img" [attr.aria-label]="label()"></canvas>
-            <div class="donut-center" aria-hidden="true">
-                <span>{{ caption() }}</span
-                ><b>{{ totalText() }}</b>
+            <div class="donut-center" aria-live="polite">
+                @if (picked(); as p) {
+                    <span class="donut-pick"><i class="dot" [style.background]="p.color"></i>{{ p.name }}</span
+                    ><b>{{ p.value }}</b
+                    ><small>{{ p.pct }}%</small>
+                } @else {
+                    <span>{{ caption() }}</span
+                    ><b>{{ totalText() }}</b>
+                }
             </div>
         </div>
     `,
@@ -680,6 +690,19 @@ export class Donut {
     });
     total = computed(() => this.slices().reduce((s, i) => s + i.value, 0));
     totalText = computed(() => money(this.total()));
+    /** fatia tocada no celular (índice), -1 = nenhuma */
+    sel = signal(-1);
+    picked = computed(() => {
+        const s = this.slices()[this.sel()];
+        return (
+            s && {
+                name: s.name,
+                color: s.color || 'var(--muted)',
+                value: money(s.value, false),
+                pct: Math.round((s.value / (this.total() || 1)) * 100),
+            }
+        );
+    });
     label = computed(() =>
         this.slices()
             .map((s) => `${s.name}: ${money(s.value, false)}`)
@@ -709,13 +732,15 @@ export class Donut {
                 cutout: '64%',
                 animation: { duration: 300, easing: 'easeOutQuart' },
                 onClick: (_e: unknown, els: { index: number }[]) => {
-                    const s = sl[els[0]?.index ?? -1];
-                    if (s) this.pick.emit(s.id);
+                    const i = els[0]?.index ?? -1;
+                    if (touch()) this.sel.set(i === this.sel() ? -1 : i);
+                    else if (sl[i]) this.pick.emit(sl[i].id);
                 },
                 plugins: {
                     legend: { display: false },
                     tooltip: {
                         ...tooltipBase(t),
+                        enabled: !touch(),
                         callbacks: {
                             label: (item: TooltipItem<'doughnut'>) =>
                                 ` ${item.label}: ${money(Number(item.raw), false)} (${Math.round((Number(item.raw) / tot) * 100)}%)`,
@@ -730,6 +755,7 @@ export class Donut {
         effect(() => {
             this.slices();
             hidden();
+            untracked(() => this.sel.set(-1)); // dados novos: volta ao total
             this.c.update();
         });
     }

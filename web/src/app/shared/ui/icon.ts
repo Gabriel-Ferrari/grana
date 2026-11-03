@@ -3,6 +3,9 @@ import { Component, input } from '@angular/core';
 /** Ícones da interface (Material Symbols Rounded). */
 const UI = [
     'add',
+    'hub',
+    'open_in_new',
+    'verified_user',
     'contrast',
     'expand_less',
     'person',

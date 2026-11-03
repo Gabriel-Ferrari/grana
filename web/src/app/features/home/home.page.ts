@@ -12,7 +12,6 @@ import {
     addMonths,
     catIcon,
     hidden,
-    notify,
     monthEnd,
     monthLabel,
     monthStart,
@@ -236,51 +235,44 @@ function loadLayout(): HomeCard[] {
                                 </section>
                             }
                             @case ('equilibrio') {
-                                @if (store.v2()) {
-                                    <section class="panel">
-                                        <div class="panel-head">
-                                            <div>
-                                                <h2>Equilíbrio financeiro</h2>
-                                                <p class="muted small" style="margin:.15rem 0 0">
-                                                    Regra 50/30/20: essenciais até 50% da renda, o resto até 30%, guardar 20%
-                                                </p>
-                                            </div>
-                                            <a routerLink="/ajustes">Essenciais <g-icon name="chevron_right" [size]="18" /></a>
+                                <section class="panel">
+                                    <div class="panel-head">
+                                        <div>
+                                            <h2>Equilíbrio financeiro</h2>
+                                            <p class="muted small" style="margin:.15rem 0 0">
+                                                Regra 50/30/20: essenciais até 50% da renda, o resto até 30%, guardar 20%
+                                            </p>
                                         </div>
-                                        @if (bal().inc > 0) {
-                                            <div class="stack" style="gap:1rem">
-                                                <g-meter
-                                                    label="Essenciais"
-                                                    [value]="bal().ess"
-                                                    [max]="bal().inc * 0.5"
-                                                    [pace]="monthPace()"
-                                                />
-                                                <g-meter
-                                                    label="Não essenciais"
-                                                    [value]="bal().non"
-                                                    [max]="bal().inc * 0.3"
-                                                    [pace]="monthPace()"
-                                                />
-                                                <p
-                                                    style="margin:0;font-weight:650"
-                                                    [class.neg]="bal().left < bal().inc * 0.2"
-                                                    [class.pos]="bal().left >= bal().inc * 0.2"
-                                                >
-                                                    Sobra do mês {{ bal().left | brl }} · {{ bal().leftPct }}% da renda
-                                                    {{ bal().left >= bal().inc * 0.2 ? '— meta de 20% batida' : '(meta: 20%)' }}
-                                                </p>
+                                        <a routerLink="/ajustes">Essenciais <g-icon name="chevron_right" [size]="18" /></a>
+                                    </div>
+                                    @if (bal().inc > 0) {
+                                        <div class="stack" style="gap:1rem">
+                                            <g-meter label="Essenciais" [value]="bal().ess" [max]="bal().inc * 0.5" [pace]="monthPace()" />
+                                            <g-meter
+                                                label="Não essenciais"
+                                                [value]="bal().non"
+                                                [max]="bal().inc * 0.3"
+                                                [pace]="monthPace()"
+                                            />
+                                            <p
+                                                style="margin:0;font-weight:650"
+                                                [class.neg]="bal().left < bal().inc * 0.2"
+                                                [class.pos]="bal().left >= bal().inc * 0.2"
+                                            >
+                                                Sobra do mês {{ bal().left | brl }} · {{ bal().leftPct }}% da renda
+                                                {{ bal().left >= bal().inc * 0.2 ? '— meta de 20% batida' : '(meta: 20%)' }}
+                                            </p>
+                                        </div>
+                                    } @else {
+                                        <div class="empty-state">
+                                            <g-icon name="savings" />
+                                            <div>
+                                                <b>Sem renda lançada neste mês</b>Quando o salário entrar, o grana mostra quanto dá para
+                                                gastar em cada lado e quanto sobra para guardar.
                                             </div>
-                                        } @else {
-                                            <div class="empty-state">
-                                                <g-icon name="savings" />
-                                                <div>
-                                                    <b>Sem renda lançada neste mês</b>Quando o salário entrar, o grana mostra quanto dá para
-                                                    gastar em cada lado e quanto sobra para guardar.
-                                                </div>
-                                            </div>
-                                        }
-                                    </section>
-                                }
+                                        </div>
+                                    }
+                                </section>
                             }
                             @case ('revisar') {
                                 @if (review().length) {
@@ -367,15 +359,18 @@ function loadLayout(): HomeCard[] {
                                                         vence {{ t.date | dmy: true }}
                                                     </div>
                                                 </div>
-                                                <span class="amt neg">{{ t.amount | brl }}</span>
-                                                <button
-                                                    class="paid-btn"
-                                                    (click)="$event.stopPropagation(); pay(t)"
-                                                    title="Marcar como paga"
-                                                    aria-label="Marcar como paga"
-                                                >
-                                                    <g-icon name="thumb_up" [size]="18" />
-                                                </button>
+                                                <!-- valor e 👍 empilhados: no celular sobra espaço para o nome -->
+                                                <div class="amt-col">
+                                                    <span class="amt neg">{{ t.amount | brl }}</span>
+                                                    <button
+                                                        class="paid-btn"
+                                                        (click)="$event.stopPropagation(); pay(t)"
+                                                        title="Marcar como paga"
+                                                        aria-label="Marcar como paga"
+                                                    >
+                                                        <g-icon name="thumb_up" [size]="18" />
+                                                    </button>
+                                                </div>
                                             </div>
                                         }
                                         @for (i of invoices(); track i.card_id + i.invoice_date) {
@@ -475,11 +470,17 @@ function loadLayout(): HomeCard[] {
                                             <div class="empty-state">
                                                 <g-icon name="credit_card" />
                                                 <div>
-                                                    <b>Sem cartões</b><a routerLink="/ajustes" class="link-more">Cadastrar em Ajustes</a>
+                                                    <b>Sem cartões</b
+                                                    ><a routerLink="/ajustes" [queryParams]="{ novo: 'cards' }" class="link-more"
+                                                        >Cadastrar cartão</a
+                                                    >
                                                 </div>
                                             </div>
                                         }
                                     </div>
+                                    <a class="btn manage-btn" routerLink="/ajustes" fragment="cartoes"
+                                        ><g-icon name="tune" [size]="18" />Gerenciar cartões</a
+                                    >
                                 </section>
                             }
                             @case ('contas') {
@@ -816,29 +817,14 @@ export class Home {
         else this.router.navigate(['/lancamentos'], { queryParams: { cat: id || 'none', m: this.m.slice(0, 7) } });
     }
 
-    async setCat(t: Tx, category_id: string) {
+    setCat(t: Tx, category_id: string) {
         this.review.update((l) => l.map((x) => (x.id === t.id ? { ...x, category_id: category_id || null } : x)));
-        await must(
-            sb
-                .from('transactions')
-                .update({ category_id: category_id || null })
-                .eq('id', t.id),
-        );
-        void this.store.offerSameDesc(t, category_id);
+        return this.store.setCat(t, category_id);
     }
 
-    async approve(t: Tx) {
+    approve(t: Tx) {
         this.review.update((l) => l.filter((x) => x.id !== t.id)); // otimista
-        await must(sb.from('transactions').update({ reviewed: true }).eq('id', t.id));
-        notify(`${t.description} revisado`, {
-            action: {
-                label: 'Desfazer',
-                run: async () => {
-                    await must(sb.from('transactions').update({ reviewed: false }).eq('id', t.id));
-                    await this.store.load();
-                },
-            },
-        });
+        return this.store.approve(t);
     }
 
     async pay(t: Tx) {

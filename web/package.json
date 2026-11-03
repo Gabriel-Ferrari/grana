@@ -6,7 +6,7 @@
         "start": "ng serve",
         "build": "ng build",
         "watch": "ng build --watch --configuration development",
-        "test": "ng test",
+        "test": "node --test 'src/app/**/*.spec.ts' '../supabase/functions/**/*.test.ts'",
         "deploy": "npm run build && (cp ../android/build/outputs/apk/debug/grana-coletor-debug.apk dist/web/browser/grana.apk || echo sem APK) && wrangler deploy",
         "preview": "npm run build && wrangler dev",
         "lint": "eslint src",

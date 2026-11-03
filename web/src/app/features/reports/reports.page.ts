@@ -18,6 +18,7 @@ import {
     today,
     swr,
     cached,
+    allRows,
 } from '../../core';
 import { Recurring, detectRecurring } from './recurring';
 import { Icon } from '../../shared/ui/icon';
@@ -71,7 +72,7 @@ import { Icon } from '../../shared/ui/icon';
                                 ><b [class.neg]="catKind() === 'exp'" [class.pos]="catKind() === 'inc'">{{ catTotal() | brl }}</b>
                             </div>
                         </div>
-                        @if (store.v2() && catKind() === 'exp') {
+                        @if (catKind() === 'exp') {
                             <div class="card-date">
                                 <g-icon name="credit_card" [size]="16" />Gastos do cartão pela data da
                                 <div class="seg small" role="group" aria-label="Data do cartão">
@@ -410,7 +411,7 @@ export class Reports {
             this.store.version();
             const f = this.from(),
                 t = this.to(),
-                bi = this.byInvoice() && this.store.v2();
+                bi = this.byInvoice();
             untracked(() => this.fetch(f, t, bi));
         });
         effect(() => {
@@ -421,7 +422,7 @@ export class Reports {
 
     /** despesas dos últimos 6 meses (sem parcelas, transferências e pagamentos de fatura) */
     async fetchRecurring() {
-        const rows = await must(
+        const rows = await allRows((a, b) =>
             sb
                 .from('transactions')
                 .select('*')
@@ -431,7 +432,9 @@ export class Reports {
                 .is('transfer_id', null)
                 .is('pays_card_id', null)
                 .is('installments', null)
-                .limit(5000),
+                .order('date', { ascending: false })
+                .order('id')
+                .range(a, b),
         );
         this.recurring.set(detectRecurring(rows as Tx[], today()));
     }

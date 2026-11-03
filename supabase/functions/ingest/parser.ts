@@ -10,6 +10,8 @@ export interface Parsed {
     merchant: string;
     last4?: string;
     date: string;
+    /** estorno no cartão de crédito: volta na fatura (valor positivo no cartão), não entra na conta */
+    refund?: true;
 }
 
 const IGNORE =
@@ -100,8 +102,11 @@ export function parse(raw: string, postedAt: number): Parsed | null {
     if (d && +d[1] >= 1 && +d[1] <= 31 && +d[2] >= 1 && +d[2] <= 12) {
         const y = d[3] ? (d[3].length === 2 ? '20' + d[3] : d[3]) : date.slice(0, 4);
         date = `${y}-${d[2]}-${d[1]}`;
+        // sem ano: "31/12" numa notificação de 01/01 é do ano anterior
+        if (!d[3] && date > brDate(postedAt + 2 * 864e5)) date = `${+y - 1}-${d[2]}-${d[1]}`;
     }
 
     const last4 = t.match(/final\s*(\d{4})/i)?.[1];
-    return { kind, amount, merchant, date, ...(last4 ? { last4 } : {}) };
+    const refund = kind === 'income' && !!last4 && /estorno|devolvemos|reembolso/i.test(t) && !/debito/i.test(t);
+    return { kind, amount, merchant, date, ...(last4 ? { last4 } : {}), ...(refund ? { refund: true as const } : {}) };
 }

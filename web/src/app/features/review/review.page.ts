@@ -120,22 +120,14 @@ export class Review {
         this.loading.set(false);
     }
 
-    async setCat(t: Tx, category_id: string) {
+    setCat(t: Tx, category_id: string) {
         this.items.update((l) => l.map((x) => (x.id === t.id ? { ...x, category_id: category_id || null } : x)));
-        await must(
-            sb
-                .from('transactions')
-                .update({ category_id: category_id || null })
-                .eq('id', t.id),
-        );
-        void this.store.offerSameDesc(t, category_id);
+        return this.store.setCat(t, category_id);
     }
 
-    async approve(t: Tx) {
+    approve(t: Tx) {
         this.items.update((l) => l.filter((x) => x.id !== t.id)); // otimista
-        await this.store.withUndo(`${t.description} aprovado`, { column: 'id', value: t.id }, () =>
-            must(sb.from('transactions').update({ reviewed: true }).eq('id', t.id)),
-        );
+        return this.store.approve(t);
     }
 
     async approveAll() {

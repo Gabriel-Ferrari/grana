@@ -1,7 +1,17 @@
-// Rodar: node --test web/src/app/invoice.spec.ts
+// Rodar: cd web && npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { invoiceClosing, invoiceStatus } from './invoice.ts';
+import { invoiceClosing, invoiceDue, invoiceStatus } from './invoice.ts';
+
+test('fatura da compra: mesmos casos do invoice_due no banco (supabase/tests/check.sql)', () => {
+    assert.equal(invoiceDue('2026-10-23', 23, 5), '2026-11-05', 'Bradesco: compra no dia do fechamento');
+    assert.equal(invoiceDue('2026-10-24', 23, 5), '2026-12-05', 'Bradesco: compra após fechamento');
+    assert.equal(invoiceDue('2026-10-24', 27, 7), '2026-11-07', 'Sicoob');
+    assert.equal(invoiceDue('2026-12-30', 29, 5), '2027-02-05', 'virada de ano');
+    assert.equal(invoiceDue('2026-02-28', 30, 10), '2026-03-10', 'fechamento 30 em fevereiro (clamp)');
+    assert.equal(invoiceDue('2026-10-02', 3, 10), '2026-10-10', 'vence no mesmo mês do fechamento');
+    assert.equal(invoiceDue('2026-01-15', 5, 31), '2026-02-28', 'vencimento 31 em fevereiro (clamp)');
+});
 
 test('fechamento: vencimento no mês seguinte, no mesmo mês e fim de fevereiro', () => {
     assert.equal(invoiceClosing('2026-11-07', 30, 7), '2026-10-30');
