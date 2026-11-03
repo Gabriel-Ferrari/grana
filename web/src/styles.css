@@ -2025,6 +2025,25 @@ kbd {
     border-radius: 16px;
     margin-bottom: 0.8rem;
 }
+.of-item .row {
+    flex-wrap: wrap;
+    min-width: 0;
+}
+/* celular: "sincronizado …" numa linha, Sincronizar largo + lixeira na de baixo (antes a lixeira saía do card) */
+@media (max-width: 560px) {
+    .of-item {
+        padding: 0.8rem;
+    }
+    .of-item > .row > .row:last-child {
+        width: 100%;
+    }
+    .of-item > .row > .row:last-child > .muted {
+        flex-basis: 100%;
+    }
+    .of-item > .row > .row:last-child > .btn:not(.icon) {
+        flex: 1;
+    }
+}
 .chip.ok {
     background: color-mix(in oklch, var(--in) 15%, var(--surface));
     color: var(--in-text);
@@ -3152,7 +3171,7 @@ body:has(.sel-bar) .toast {
         font-weight: 600;
         /* no celular o nome não some em reticências: até 2 linhas */
         white-space: normal;
-        overflow-wrap: anywhere;
+        overflow-wrap: break-word;
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
@@ -3500,7 +3519,7 @@ body:has(.sel-bar) .toast {
         gap: 0;
     }
     .tabs button {
-        flex: 1 1 0;
+        flex: 1 1 auto; /* reparte a sobra igual: "Categorias" não encosta em "Balanço" */
         justify-content: center;
         padding: 0.65rem 0.2rem;
         font-size: 0.88rem;
@@ -4198,19 +4217,23 @@ body:has(.sel-bar) .toast {
         text-overflow: ellipsis;
     }
     /* período: só o ícone, para caber na linha do mês */
-    .tx-toolbar .fchip > span:not(.ms) {
+    .tx-toolbar .fchip > span:not(.ms),
+    .rep-head .fchip > span:not(.ms) {
         display: none;
     }
+    .rep-head .fchip,
     .tx-toolbar .fchip {
         height: 46px;
         padding: 0 0.45rem 0 0.7rem;
         gap: 0;
     }
+    .rep-head .fchip.on,
     .tx-toolbar .fchip.on {
         background: var(--surface);
         color: var(--ink);
         border-color: var(--line);
     }
+    .rep-head .fchip-ico,
     .tx-toolbar .fchip-ico {
         font-size: 22px;
     }
@@ -4630,5 +4653,75 @@ body:has(.sel-bar) .toast {
     .cards-total,
     .inv-break {
         background: color-mix(in oklch, var(--sunk) 55%, var(--surface));
+    }
+}
+
+/* celular, Relatórios: mês e período na mesma linha; "data da compra/fatura" ao lado do texto */
+@media (max-width: 560px) {
+    .rep-head > .row:not(:has(input)) {
+        flex-wrap: nowrap;
+        width: 100%;
+    }
+    .rep-head .month-pill {
+        flex: 1;
+        min-width: 0;
+        justify-content: space-between;
+    }
+    .rep-head .month-pill b {
+        min-width: 0;
+        white-space: nowrap;
+        font-size: 0.95rem;
+    }
+    .card-date {
+        flex-wrap: nowrap;
+        line-height: 1.3;
+    }
+    .card-date .seg {
+        flex: none;
+        margin-left: auto;
+    }
+}
+
+/* celular: teclado do sistema aberto (TxForm põe --kb e .kb): a folha acaba em cima do teclado, o topo encolhe e o ✓ some
+   (Enter do teclado salva). Assim as sugestões de descrição aparecem acima do teclado. */
+@media (max-width: 860px) {
+    .drawer.tx {
+        bottom: var(--kb, 0px);
+        height: calc(96dvh - var(--kb, 0px));
+        max-height: calc(96dvh - var(--kb, 0px));
+    }
+    .drawer.tx.kb .tx-head {
+        padding-block: 0.45rem;
+    }
+    /* tipo (Despesa/Receita/Transferência) volta quando o teclado fecha */
+    .drawer.tx.kb .tx-head > .row:first-child {
+        display: none;
+    }
+    .drawer.tx.kb .tx-amount {
+        margin-top: 0;
+    }
+    .drawer.tx.kb .tx-body > .tx-row:first-child {
+        padding-top: 0.5rem;
+    }
+    .drawer.tx.kb .tx-body > .tx-row:first-child .lbl {
+        display: none;
+    }
+    .drawer.tx.kb .tx-amount .money-input {
+        font-size: 1.8rem;
+    }
+    .drawer.tx.kb .thumb {
+        width: 38px;
+        height: 38px;
+    }
+    .drawer.tx.kb .tx-paid,
+    .drawer.tx.kb .calc-expr {
+        display: none;
+    }
+    .drawer.tx.kb .tx-body {
+        padding-bottom: 1rem !important;
+    }
+    .drawer.tx.kb footer .row:last-child {
+        opacity: 0;
+        pointer-events: none;
     }
 }

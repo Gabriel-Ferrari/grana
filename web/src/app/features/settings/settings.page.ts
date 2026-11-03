@@ -197,9 +197,12 @@ type Row = Record<string, any>;
                 @for (k of ['expense', 'income']; track k) {
                     <div>
                         <p class="muted small" style="margin:0 0 .4rem">{{ k === 'expense' ? 'Saídas' : 'Entradas' }}</p>
-                        <div class="list">
+                        <div class="list reorder-list" cdkDropList cdkDropListLockAxis="y" (cdkDropListDropped)="dropCat(k, $event)">
                             @for (c of catsOf(k); track c['id']) {
                                 <div
+                                    cdkDrag
+                                    (cdkDragStarted)="haptic()"
+                                    (cdkDragEnded)="dragEnd()"
                                     class="item click"
                                     (click)="open('categories', c)"
                                     [style.padding-left]="c['parent_id'] ? '2rem' : null"
@@ -238,6 +241,9 @@ type Row = Record<string, any>;
                                         </button>
                                     </span>
                                     <g-icon name="chevron_right" class="muted" />
+                                    <span class="reorder-handle" cdkDragHandle aria-hidden="true" (click)="$event.stopPropagation()"
+                                        ><g-icon name="drag_handle" [size]="22"
+                                    /></span>
                                 </div>
                             }
                         </div>
@@ -614,6 +620,20 @@ export class Settings {
         await this.savePositions(kind, l);
     }
     haptic = haptic;
+    /** arrastar categoria: muda de lugar entre as irmãs (subcategoria não troca de categoria-mãe) */
+    async dropCat(kind: string, e: CdkDragDrop<unknown>) {
+        if (e.previousIndex === e.currentIndex) return;
+        const flat = this.catsOf(kind),
+            moved = flat[e.previousIndex];
+        let to = flat[e.currentIndex];
+        // categoria-mãe solta sobre uma subcategoria: conta como a mãe dela
+        if (!moved['parent_id'] && to['parent_id']) to = flat.find((c) => c['id'] === to['parent_id']) ?? to;
+        if ((to['parent_id'] ?? null) !== (moved['parent_id'] ?? null)) return; // fora do grupo: volta ao lugar
+        const l = this.sibs(moved);
+        moveItemInArray(l, l.indexOf(moved), l.indexOf(to));
+        haptic();
+        await this.savePositions('categories', l);
+    }
     /** soltar o item não deve abrir a edição dele */
     private droppedAt = 0;
     dragEnd() {
