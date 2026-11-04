@@ -266,6 +266,8 @@ export interface ChipOption {
     bank?: { name: string; institution?: string | null };
     group?: string;
     sub?: boolean;
+    /** linha menor embaixo do nome (ex.: "Cartão · final 1234", para não confundir com a conta do mesmo banco) */
+    hint?: string;
 }
 
 /** Filtro em chip (estilo Organizze/Copilot): mostra o selecionado; abre lista de opções em chips
@@ -289,7 +291,12 @@ export interface ChipOption {
                         ><span class="ms">{{ current()?.icon ?? fallbackIcon() }}</span></span
                     >
                 }
-                <span class="frow-val" [class.placeholder]="!current()">{{ current()?.label ?? placeholder() }}</span>
+                <span class="frow-val" [class.placeholder]="!current()"
+                    >{{ current()?.label ?? placeholder() }}
+                    @if (current()?.hint; as h) {
+                        <small class="fhint">{{ h }}</small>
+                    }
+                </span>
                 <span class="ms caret">chevron_right</span>
             </button>
         } @else {
@@ -363,7 +370,12 @@ export interface ChipOption {
                                     ><span class="ms">{{ o.icon }}</span></span
                                 >
                             }
-                            <span>{{ o.label }}</span>
+                            <span
+                                >{{ o.label }}
+                                @if (o.hint) {
+                                    <small class="fhint">{{ o.hint }}</small>
+                                }
+                            </span>
                         </button>
                     }
                     @if (createLabel()) {

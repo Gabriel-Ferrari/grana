@@ -1,7 +1,6 @@
 import {
     Component,
     DestroyRef,
-    ElementRef,
     OnInit,
     afterNextRender,
     computed,
@@ -389,7 +388,6 @@ export class TxForm implements OnInit {
     hints = signal<{ id: string; name: string }[]>([]);
     topCats = signal<string[]>([]);
     money = viewChild(Money);
-    sheet = viewChild.required<ElementRef<HTMLElement>>('sheet');
     fmt = (c: number) => brl(Math.round(c));
     private timer?: ReturnType<typeof setTimeout>;
 
@@ -475,22 +473,8 @@ export class TxForm implements OnInit {
                 arm();
             }));
         arm();
-        // celular: o teclado do sistema cobre o fim da folha (e as sugestões de descrição). A folha passa a terminar
-        // em cima dele; com o teclado aberto o topo fica compacto (classe kb).
-        const vv = visualViewport;
-        const fit = () => {
-            const kb = Math.max(0, Math.round(innerHeight - vv!.height - vv!.offsetTop));
-            const el = this.sheet().nativeElement;
-            el.style.setProperty('--kb', kb + 'px');
-            el.classList.toggle('kb', kb > 80);
-        };
-        if (vv && this.mobile) {
-            vv.addEventListener('resize', fit);
-            vv.addEventListener('scroll', fit);
-        }
+        // teclado do sistema: --kb e classe kb em <html> (ui-state) fazem a folha terminar em cima dele, com topo compacto
         inject(DestroyRef).onDestroy(() => {
-            vv?.removeEventListener('resize', fit);
-            vv?.removeEventListener('scroll', fit);
             this.unback();
             void this.store.dropUnusedFiles(this.uploaded);
         });
@@ -570,6 +554,7 @@ export class TxForm implements OnInit {
                 value: 'c:' + c.id,
                 label: c.name,
                 group: 'Cartões de crédito',
+                hint: 'Cartão de crédito' + (c.last4 ? ' · final ' + c.last4 : ''),
                 bank: { name: c.name, institution: c.institution },
             })),
         ];
