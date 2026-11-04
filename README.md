@@ -60,7 +60,6 @@ Angular (Cloudflare Workers) ── supabase-js + login Google ─────�
 | `supabase/tests/check.sql` | testes do banco: regra de fatura, saldo, RLS, avisos (roda em transação, rollback no fim) |
 | `web/` | app Angular (estrutura abaixo) |
 | `android/` | app Android "grana": app web em tela cheia (TWA/Chrome) + coletor de notificações (Kotlin) |
-| `scripts/import-organizze.mjs` | migra seus dados do Organizze (API v2), idempotente |
 
 ### `web/src/app` — por domínio
 ```
@@ -164,12 +163,6 @@ A tela do coletor não tem ícone: **toque longo em grana → Configurar coletor
 6. Avisos: **Ajustes → Avisos no celular → Ativar avisos** e depois **Enviar teste**. O aviso chega como notificação do
    Chrome (site grana); se não chegar, confira se o Chrome pode mostrar notificações.
 
-### 5. Migrar do Organizze
-Token em app.organizze.com.br/configuracoes/api-keys, depois:
-```bash
-ORGANIZZE_EMAIL=... ORGANIZZE_TOKEN=... SUPABASE_URL=https://SEU_REF.supabase.co \
-SUPABASE_SERVICE_ROLE_KEY=... GRANA_EMAIL=seu@gmail.com node scripts/import-organizze.mjs 2018-01
-```
 
 ## Cuidados do plano grátis
 - Supabase pausa o projeto após **7 dias sem atividade** — o coletor enviando notificações mantém ativo.
