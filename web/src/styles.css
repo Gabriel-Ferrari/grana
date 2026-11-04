@@ -2738,6 +2738,12 @@ a {
     font-size: 1.12rem;
     font-weight: 600;
 }
+.fhint {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--muted);
+}
 .frow-val.placeholder {
     color: var(--muted);
     font-weight: 500;
@@ -4690,38 +4696,47 @@ body:has(.sel-bar) .toast {
         height: calc(96dvh - var(--kb, 0px));
         max-height: calc(96dvh - var(--kb, 0px));
     }
-    .drawer.tx.kb .tx-head {
+    .kb .drawer.tx .tx-head {
         padding-block: 0.45rem;
     }
     /* tipo (Despesa/Receita/Transferência) volta quando o teclado fecha */
-    .drawer.tx.kb .tx-head > .row:first-child {
+    .kb .drawer.tx .tx-head > .row:first-child {
         display: none;
     }
-    .drawer.tx.kb .tx-amount {
+    .kb .drawer.tx .tx-amount {
         margin-top: 0;
     }
-    .drawer.tx.kb .tx-body > .tx-row:first-child {
+    .kb .drawer.tx .tx-body > .tx-row:first-child {
         padding-top: 0.5rem;
     }
-    .drawer.tx.kb .tx-body > .tx-row:first-child .lbl {
+    .kb .drawer.tx .tx-body > .tx-row:first-child .lbl {
         display: none;
     }
-    .drawer.tx.kb .tx-amount .money-input {
+    .kb .drawer.tx .tx-amount .money-input {
         font-size: 1.8rem;
     }
-    .drawer.tx.kb .thumb {
+    .kb .drawer.tx .thumb {
         width: 38px;
         height: 38px;
     }
-    .drawer.tx.kb .tx-paid,
-    .drawer.tx.kb .calc-expr {
+    .kb .drawer.tx .tx-paid,
+    .kb .drawer.tx .calc-expr {
         display: none;
     }
-    .drawer.tx.kb .tx-body {
+    .kb .drawer.tx .tx-body {
         padding-bottom: 1rem !important;
     }
-    .drawer.tx.kb footer .row:last-child {
+    .kb .drawer.tx footer .row:last-child {
         opacity: 0;
         pointer-events: none;
+    }
+    /* excluir/duplicar ficam no topo, ao lado do X: somem junto com ele para não cobrir o valor */
+    .kb .drawer.tx footer .row:first-child {
+        display: none;
+    }
+    /* lista de escolha (categoria, conta…) com busca: sobe para cima do teclado, onde dá para ver o filtrado */
+    .fpop {
+        bottom: var(--kb, 0px);
+        max-height: min(78dvh, calc(100dvh - var(--kb, 0px) - 2rem));
     }
 }

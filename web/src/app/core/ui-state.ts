@@ -19,6 +19,19 @@ function barColor(t: Theme) {
 }
 barColor(theme());
 
+/** Celular: o teclado do sistema cobre o fim da tela sem encolher o layout. A altura dele vai em --kb (e a classe kb,
+ *  se aberto) no <html>, para folhas presas embaixo (formulário, listas de escolha) terminarem em cima do teclado. */
+const vv = visualViewport;
+if (vv) {
+    const fit = () => {
+        const kb = Math.max(0, Math.round(innerHeight - vv.height - vv.offsetTop));
+        document.documentElement.style.setProperty('--kb', kb + 'px');
+        document.documentElement.classList.toggle('kb', kb > 80);
+    };
+    vv.addEventListener('resize', fit);
+    vv.addEventListener('scroll', fit);
+}
+
 /** Ocultar valores (olho): lido pelo pipe brl. */
 export const hidden = signal(localStorage.getItem('grana.hidden') === '1');
 export function toggleHidden() {
