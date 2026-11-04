@@ -15,7 +15,7 @@ import {
 import { addMonths, haptic, onBack, today } from '../../core';
 import { SheetDrag } from './sheet';
 import { Icon } from './icon';
-import { BankLogo } from '../banks';
+import { BankLogo, CardArt } from '../banks';
 
 /** Valor em reais digitado a partir dos centavos, como no Organizze: 1 → 0,01 · 12 → 0,12 · 1234 → 12,34.
  *  Funciona com teclado virtual (lê os dígitos no evento input, não depende de keydown). */
@@ -264,6 +264,8 @@ export interface ChipOption {
     icon?: string;
     color?: string;
     bank?: { name: string; institution?: string | null };
+    /** cartão de crédito: mini cartão na cor do banco (no lugar do logo redondo), para não confundir com a conta */
+    card?: { name: string; institution?: string | null; color?: string | null };
     group?: string;
     sub?: boolean;
     /** linha menor embaixo do nome (ex.: "Cartão · final 1234", para não confundir com a conta do mesmo banco) */
@@ -274,7 +276,7 @@ export interface ChipOption {
  *  (popover no desktop, folha de baixo no celular). Sem <select> genérico. */
 @Component({
     selector: 'g-chip-select',
-    imports: [BankLogo, SheetDrag],
+    imports: [BankLogo, CardArt, SheetDrag],
     template: `
         @if (variant() === 'row') {
             <button
@@ -284,7 +286,9 @@ export interface ChipOption {
                 [attr.aria-expanded]="open()"
                 [attr.aria-label]="label() + (current() ? ': ' + current()!.label : '')"
             >
-                @if (current()?.bank; as b) {
+                @if (current()?.card; as k) {
+                    <g-card-art [name]="k.name" [institution]="k.institution" [color]="k.color" [width]="54" />
+                } @else if (current()?.bank; as b) {
                     <g-bank [name]="b.name" [institution]="b.institution" [size]="40" [fallback]="fallbackIcon()" />
                 } @else {
                     <span class="cat-ico round" [style.--cc]="current()?.color ?? 'var(--muted)'"
@@ -363,7 +367,9 @@ export interface ChipOption {
                             [attr.aria-selected]="o.value === value()"
                             (click)="pick(o.value)"
                         >
-                            @if (o.bank) {
+                            @if (o.card; as k) {
+                                <g-card-art [name]="k.name" [institution]="k.institution" [color]="k.color" [width]="48" />
+                            } @else if (o.bank) {
                                 <g-bank [name]="o.bank.name" [institution]="o.bank.institution" [size]="26" />
                             } @else if (o.icon) {
                                 <span class="cat-ico sm" [style.--cc]="o.color"

@@ -555,7 +555,7 @@ export class TxForm implements OnInit {
                 label: c.name,
                 group: 'Cartões de crédito',
                 hint: 'Cartão de crédito' + (c.last4 ? ' · final ' + c.last4 : ''),
-                bank: { name: c.name, institution: c.institution },
+                card: { name: c.name, institution: c.institution, color: c.color },
             })),
         ];
     }

@@ -2689,6 +2689,10 @@ a {
 .fopt:hover {
     background: var(--sunk);
 }
+/* lista com contas e cartões: logo redondo (26px) no centro do espaço do mini cartão (48px), nomes alinhados */
+.fpop-list:has(g-card-art) .fopt > g-bank {
+    margin-inline: 11px;
+}
 .fopt.sub {
     padding-left: 2.2rem;
     font-weight: 550;
