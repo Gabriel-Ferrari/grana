@@ -3065,14 +3065,21 @@ textarea.bare {
     .sel-bar {
         bottom: calc(4.7rem + env(safe-area-inset-bottom));
         flex-wrap: wrap;
-        justify-content: flex-end;
+        justify-content: center;
         row-gap: 0.2rem;
     }
+    /* centralizado: resumo numa linha, ações na de baixo; o X fica no canto sem empurrar nada */
+    .sel-bar > .btn.icon:first-child {
+        position: absolute;
+        top: 0.3rem;
+        left: 0.3rem;
+    }
     .sel-bar .grow {
-        flex: 1 1 calc(100% - 3rem);
-        flex-wrap: nowrap;
-        white-space: nowrap;
-        overflow: hidden;
+        flex: 1 1 100%;
+        justify-content: center;
+        row-gap: 0.1rem;
+        padding: 0.35rem 2.4rem 0;
+        text-align: center;
     }
 }
 body:has(.sel-bar) .toast {
