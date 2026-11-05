@@ -1575,16 +1575,19 @@ details.table-view th:first-child {
     font-size: 0.9rem;
     box-shadow: 0 16px 40px -12px oklch(15% 0.03 160 / 0.5);
     animation: toast-in 0.35s var(--ease);
+    /* left:50% limitava a largura a meia tela e quebrava "1 excluído" em duas linhas */
+    width: max-content;
     max-width: calc(100vw - 2rem);
 }
-.toast .ms {
+/* só o ícone de status: o do botão (fundo lime) sumia */
+.toast > g-icon .ms {
     color: var(--lime);
 }
 .toast.error {
     background: var(--danger);
     color: white;
 }
-.toast.error .ms {
+.toast.error > g-icon .ms {
     color: white;
 }
 .toast button {
@@ -3217,9 +3220,6 @@ body:has(.sel-bar) .toast {
     .paid-btn {
         width: 34px;
         height: 40px;
-    }
-    .item > span[style*='width:30px'] {
-        width: 34px !important;
     }
 }
 /* toque longo seleciona o lançamento, não o texto */

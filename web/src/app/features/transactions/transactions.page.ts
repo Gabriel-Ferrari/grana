@@ -215,22 +215,25 @@ type Inv = Invoice & { due: number; running_due: number };
                                     }}
                                 </div>
                             </div>
-                            <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0 && !t.transfer_id">{{
-                                t.amount | brl
-                            }}</span>
-                            @if (t.account_id) {
-                                <button
-                                    class="paid-btn"
-                                    [class.on]="t.paid"
-                                    (click)="$event.stopPropagation(); togglePaid(t)"
-                                    [attr.aria-label]="t.paid ? 'Pago — marcar como pendente' : 'Pendente — marcar como pago'"
-                                    [title]="t.paid ? 'Pago' : 'Pendente'"
-                                >
-                                    <g-icon name="thumb_up" [size]="18" [fill]="t.paid" />
-                                </button>
-                            } @else {
-                                <span style="width:30px;flex:none"></span>
-                            }
+                            <!-- valor e 👍 empilhados no celular (Organizze): sobra espaço para o nome -->
+                            <div class="amt-col">
+                                <span class="amt" [class.pos]="t.amount > 0" [class.neg]="t.amount < 0 && !t.transfer_id">{{
+                                    t.amount | brl
+                                }}</span>
+                                @if (t.account_id) {
+                                    <button
+                                        class="paid-btn"
+                                        [class.on]="t.paid"
+                                        (click)="$event.stopPropagation(); togglePaid(t)"
+                                        [attr.aria-label]="t.paid ? 'Pago — marcar como pendente' : 'Pendente — marcar como pago'"
+                                        [title]="t.paid ? 'Pago' : 'Pendente'"
+                                    >
+                                        <g-icon name="thumb_up" [size]="18" [fill]="t.paid" />
+                                    </button>
+                                } @else {
+                                    <span style="width:30px;flex:none"></span>
+                                }
+                            </div>
                         </div>
                     }
                 </div>
@@ -579,7 +582,8 @@ export class Transactions {
         const paid = !this.allPaid(),
             ids = this.selRows().map((t) => t.id);
         this.sel.set(this.empty);
-        await this.store.withUndo(`${ids.length} marcados como ${paid ? 'pagos' : 'pendentes'}`, { column: 'id', value: ids }, () =>
+        const s = ids.length > 1 ? 's' : '';
+        await this.store.withUndo(`${ids.length} marcado${s} como ${paid ? 'pago' : 'pendente'}${s}`, { column: 'id', value: ids }, () =>
             must(sb.from('transactions').update({ paid }).in('id', ids)),
         );
     }
@@ -600,7 +604,7 @@ export class Transactions {
                 ]),
             ];
         this.sel.set(this.empty);
-        await this.store.withUndo(`${ids.length} excluídos`, { column: 'id', value: ids }, () =>
+        await this.store.withUndo(`${ids.length} ${ids.length > 1 ? 'excluídos' : 'excluído'}`, { column: 'id', value: ids }, () =>
             must(sb.from('transactions').delete().in('id', ids)),
         );
     }
@@ -637,7 +641,7 @@ export class Transactions {
             k = this.kind();
         const byId = this.store.catById();
         const base = this.isCash()
-            ? [...this.rows().filter((t) => !t.card_id), ...this.invRows()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+            ? [...this.rows().filter((t) => !t.card_id), ...this.invRows()].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
             : this.rows();
         return base.filter(
             (t) =>
@@ -706,7 +710,8 @@ export class Transactions {
             let q = sb.from('transactions').select('*').gte('date', month).lte('date', until);
             if (t === 'a') q = q.eq('account_id', id);
             if (t === 'c') q = q.eq('card_id', id);
-            return q.order('date', { ascending: false }).order('created_at', { ascending: false }).order('id').range(a, b);
+            // como no Organizze: do dia 1 para o fim do período; no mesmo dia, o último lançado primeiro
+            return q.order('date').order('created_at', { ascending: false }).order('id').range(a, b);
         };
         const end = until;
         const ids = [...this.accIds()];
