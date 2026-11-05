@@ -145,6 +145,8 @@ const rows = txs.map((t) => {
         user_id,
         ext_id: `org:tx:${t.id}`,
         source: 'import',
+        // hora real de criação no Organizze: a lista ordena o dia por ela (último lançado primeiro)
+        created_at: t.created_at,
         description: t.description || '(sem descrição)',
         amount: t.amount_cents,
         date: t.date,
