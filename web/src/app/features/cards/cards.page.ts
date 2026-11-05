@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, ElementRef, afterRenderEffect, computed, effect, inject, input, signal, untracked, viewChild } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { Meter } from '../../shared/ui/charts';
 import { BrlPipe, Card, DmyPipe, Invoice, Store, Tx, catIcon, monthLabel, must, sb, today } from '../../core';
@@ -28,7 +28,7 @@ type Inv = Invoice & { due: number; running_due: number };
             </section>
         }
 
-        <div class="cc-rail reveal" role="tablist">
+        <div class="cc-rail reveal" role="tablist" #rail (scroll)="snap()">
             @for (c of cards(); track c.id) {
                 <button
                     class="cc"
@@ -244,6 +244,8 @@ export class Cards {
     icon = (t: Tx) => catIcon(this.store.catById().get(t.category_id ?? ''));
     color = (name: string, c: string | null, inst: string | null) => bankColor(name, c, inst) ?? 'var(--forest)';
     net = networkLogo;
+    rail = viewChild<ElementRef<HTMLElement>>('rail');
+    private snapT?: ReturnType<typeof setTimeout>;
 
     constructor() {
         effect(() => {
@@ -258,6 +260,40 @@ export class Cards {
             const i = this.sel();
             untracked(() => this.fetchTxs(i));
         });
+        // cartão selecionado por toque ou ?c= vai para o centro do trilho
+        afterRenderEffect(() => {
+            this.card();
+            const rail = this.oneUp();
+            const on = rail?.querySelector('.cc.on');
+            // scrollTo, não scrollBy: scrollBy faz snap na direção do delta e pularia para o cartão vizinho
+            if (rail && on) rail.scrollTo({ left: rail.scrollLeft + this.offCenter(rail, on), behavior: 'smooth' });
+        });
+    }
+
+    /** trilho estreito (um cartão por vez, celular): ao parar de arrastar, seleciona o cartão do centro */
+    snap() {
+        clearTimeout(this.snapT);
+        this.snapT = setTimeout(() => {
+            const rail = this.oneUp();
+            if (!rail) return;
+            const els = [...rail.children];
+            const d = (el: Element) => Math.abs(this.offCenter(rail, el));
+            const id = this.cards()[els.indexOf(els.reduce((a, b) => (d(b) < d(a) ? b : a)))]?.id;
+            if (id && id !== this.card()?.id) this.select(id);
+        }, 120);
+    }
+
+    /** só no trilho estreito: no largo (desktop) vários cartões aparecem lado a lado e não há "o do centro" */
+    private oneUp() {
+        const rail = this.rail()?.nativeElement;
+        const first = rail?.firstElementChild as HTMLElement | null;
+        return rail && first && rail.clientWidth < 2 * first.offsetWidth ? rail : undefined;
+    }
+
+    private offCenter(rail: Element, el: Element) {
+        const r = rail.getBoundingClientRect(),
+            e = el.getBoundingClientRect();
+        return e.left + e.width / 2 - (r.left + r.width / 2);
     }
 
     select(id: string) {
