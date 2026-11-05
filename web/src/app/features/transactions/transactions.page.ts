@@ -670,7 +670,11 @@ export class Transactions {
             date,
             items,
             sum: items.filter((t) => !t.transfer_id && (this.isCash() || !t.pays_card_id)).reduce((s, t) => s + t.amount, 0),
-            label: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' }),
+            // como no Organizze: o dia de hoje aparece como "Hoje"
+            label:
+                date === today()
+                    ? 'Hoje'
+                    : new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'short' }),
         }));
     });
     footOpen = signal(false);
