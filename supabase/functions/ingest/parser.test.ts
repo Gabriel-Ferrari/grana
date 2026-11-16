@@ -3,7 +3,7 @@
 // caixa de entrada do app pra cá e ajuste o parser.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ignoredReason, parse } from './parser.ts';
+import { ignoredReason, parse, split } from './parser.ts';
 
 const at = Date.parse('2026-10-31T17:00:00Z');
 const cases: [string, ReturnType<typeof parse>][] = [
@@ -35,6 +35,14 @@ const cases: [string, ReturnType<typeof parse>][] = [
         'CAIXA: Compra no débito de R$ 50,00 em POSTO SHELL 12.345.678/0001-90',
         { kind: 'expense', amount: 5000, merchant: 'POSTO SHELL', date: '2026-10-31' },
     ],
+    [
+        'Bradesco Cartões\nCompra de R$ 5.332,00 APROVADA em 12 X em AMAZON BR, no Cartão final 5529.',
+        { kind: 'card', amount: 533200, merchant: 'AMAZON BR', last4: '5529', date: '2026-10-31', installments: 12 },
+    ],
+    [
+        'Compra de R$ 33,60 APROVADA em 99FOOD *ESFIHAR, no Cartão final 5529.',
+        { kind: 'card', amount: 3360, merchant: '99FOOD *ESFIHAR', last4: '5529', date: '2026-10-31' },
+    ],
     ['Compra de R$ 900,00 recusada em LOJA X', null],
     ['Aproveite 10% de desconto no seu próximo Pix de R$ 10,00', null],
     ['Sua fatura fechou! Valor R$ 1.771,21', null],
@@ -63,4 +71,19 @@ test('compra negada e avisos do banco são ignorados sozinhos', () => {
     );
     assert.equal(ignoredReason('Bradesco Cartões\nSua fatura fechou. Valor R$ 1.454,49'), 'aviso do banco');
     assert.equal(ignoredReason('Compra de R$ 99,90 APROVADA em LOJAS RENNER FL, no Cartão final 5529.'), null);
+});
+
+test('parcelada: uma linha por mês, a 1ª com os centavos que sobram, soma igual ao total', () => {
+    const rows = split({ amount: 533200, date: '2026-01-31', installments: 12 });
+    assert.equal(rows.length, 12);
+    assert.deepEqual(rows[0], { amount: 44437, date: '2026-01-31', installment: 1, installments: 12 });
+    assert.deepEqual(rows[1], { amount: 44433, date: '2026-02-28', installment: 2, installments: 12 });
+    assert.equal(rows.at(-1)?.date, '2026-12-31');
+    assert.equal(
+        rows.reduce((s, r) => s + r.amount, 0),
+        533200,
+    );
+    assert.deepEqual(split({ amount: 990, date: '2026-11-16' }), [
+        { amount: 990, date: '2026-11-16', installment: null, installments: null },
+    ]);
 });

@@ -12,6 +12,8 @@ export interface Parsed {
     date: string;
     /** estorno no cartão de crédito: volta na fatura (valor positivo no cartão), não entra na conta */
     refund?: true;
+    /** compra parcelada no cartão ("APROVADA em 12 X em LOJA"): amount é o total */
+    installments?: number;
 }
 
 const IGNORE =
@@ -23,7 +25,7 @@ const CARD = /(compra|aprovad|cartao)/i;
 const END = String.raw`(?=\s+(?:para o cartao|no cartao|com o cartao|com cartao|no valor|valor|cpf|chave|em \d)|[,;]|\.(?:\s|$)|$)`;
 const MERCHANT: Record<Kind, RegExp[]> = {
     card: [
-        new RegExp(String.raw`aprovad[ao] em (?!\d)(.+?)` + END, 'i'),
+        new RegExp(String.raw`aprovad[ao] em (?!\d{1,2}\/)(.+?)` + END, 'i'),
         new RegExp(String.raw`(?:no estabelecimento|estab\.?|local:)\s*(.+?)` + END, 'i'),
         /\d{2}:\d{2}\s+(?!em\b)(.+?)\.?$/i,
         new RegExp(
@@ -65,8 +67,11 @@ export function ignoredReason(raw: string): string | null {
 }
 
 export function parse(raw: string, postedAt: number): Parsed | null {
-    const t = normalize(raw);
+    let t = normalize(raw);
     if (IGNORE.test(t)) return null;
+    // Bradesco: "APROVADA em 12 X em AMAZON BR"; sai do texto para não virar o estabelecimento
+    const inst = t.match(/\s+em (\d{1,2}) ?x\b/i);
+    if (inst) t = t.replace(inst[0], '');
 
     const m = t.match(/R\$\s*(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)/i) ?? t.match(/\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/);
     if (!m) return null;
@@ -108,5 +113,35 @@ export function parse(raw: string, postedAt: number): Parsed | null {
 
     const last4 = t.match(/final\s*(\d{4})/i)?.[1];
     const refund = kind === 'income' && !!last4 && /estorno|devolvemos|reembolso/i.test(t) && !/debito/i.test(t);
-    return { kind, amount, merchant, date, ...(last4 ? { last4 } : {}), ...(refund ? { refund: true as const } : {}) };
+    const n = kind === 'card' && inst ? +inst[1] : 0;
+    return {
+        kind,
+        amount,
+        merchant,
+        date,
+        ...(last4 ? { last4 } : {}),
+        ...(refund ? { refund: true as const } : {}),
+        ...(n > 1 ? { installments: n } : {}),
+    };
+}
+
+/** Uma linha por mês da compra parcelada; a 1ª leva os centavos que sobram (como o banco manda pela Open Finance). */
+export function split(p: Pick<Parsed, 'amount' | 'date' | 'installments'>) {
+    const n = p.installments ?? 1,
+        per = Math.floor(p.amount / n);
+    return Array.from({ length: n }, (_, i) => ({
+        amount: i ? per : p.amount - per * (n - 1),
+        date: addMonths(p.date, i),
+        installment: n > 1 ? i + 1 : null,
+        installments: n > 1 ? n : null,
+    }));
+}
+
+/** mesma regra do app (core/format.ts): 31/01 + 1 mês = 28/02 */
+function addMonths(iso: string, n: number): string {
+    const [y, m, d] = iso.split('-').map(Number);
+    const first = new Date(Date.UTC(y, m - 1 + n, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0)).getUTCDate();
+    first.setUTCDate(Math.min(d, last));
+    return first.toISOString().slice(0, 10);
 }

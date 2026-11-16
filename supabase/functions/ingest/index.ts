@@ -2,7 +2,7 @@
 // body: { package, title, text, big_text, sub_text, info_text, text_lines, posted_at (ms), key }
 // Salva notificação crua; se o parser entender e achar conta/cartão, cria o lançamento.
 import { createClient } from 'npm:@supabase/supabase-js@2';
-import { ignoredReason, parse } from './parser.ts';
+import { ignoredReason, parse, split } from './parser.ts';
 
 const db = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 const json = (body: unknown, status = 200) =>
@@ -93,23 +93,30 @@ Deno.serve(async (req) => {
         .limit(1)
         .maybeSingle();
 
-    const { data: tx, error: txErr } = await db
+    // parcelada: uma linha por mês, como no formulário; só a 1ª pede revisão
+    const group_id = parsed.installments ? crypto.randomUUID() : null;
+    const { data: txs, error: txErr } = await db
         .from('transactions')
-        .insert({
-            user_id,
-            description: desc,
-            amount: parsed.kind === 'income' ? parsed.amount : -parsed.amount,
-            date: parsed.date,
-            paid: true,
-            card_id,
-            account_id,
-            category_id: prev?.category_id ?? null,
-            source: 'notification',
-            reviewed: false,
-        })
-        .select('id')
-        .single();
+        .insert(
+            split(parsed).map((p, i) => ({
+                user_id,
+                description: desc,
+                amount: parsed.kind === 'income' ? p.amount : -p.amount,
+                date: p.date,
+                paid: true,
+                card_id,
+                account_id,
+                category_id: prev?.category_id ?? null,
+                source: 'notification',
+                reviewed: i > 0,
+                group_id,
+                installment: p.installment,
+                installments: p.installments,
+            })),
+        )
+        .select('id');
     if (txErr) return json({ id: row.id, parsed, error: txErr.message }, 500);
+    const tx = txs[0];
 
     await db.from('notifications').update({ status: 'done', transaction_id: tx.id }).eq('id', row.id);
     return json({ id: row.id, parsed, transaction_id: tx.id });
