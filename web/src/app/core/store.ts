@@ -169,6 +169,22 @@ export class Store {
         return true;
     }
 
+    /** Excluir vários (seleção em lote), com Desfazer; transferência sai com as duas pernas. */
+    async removeMany(rows: Pick<Tx, 'id' | 'transfer_id'>[]) {
+        const tids = [...new Set(rows.map((t) => t.transfer_id).filter((x): x is string => !!x))];
+        let ids = rows.map((t) => t.id);
+        if (tids.length)
+            ids = [
+                ...new Set([
+                    ...ids,
+                    ...(await must(sb.from('transactions').select('id').in('transfer_id', tids))).map((r) => r.id as string),
+                ]),
+            ];
+        await this.withUndo(`${ids.length} ${ids.length > 1 ? 'excluídos' : 'excluído'}`, { column: 'id', value: ids }, () =>
+            must(sb.from('transactions').delete().in('id', ids)),
+        );
+    }
+
     /** Alteração com "Desfazer": guarda as linhas antes, aplica, oferece restaurar. */
     async withUndo(
         text: string,

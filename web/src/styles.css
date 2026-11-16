@@ -2283,6 +2283,13 @@ details.guide code {
     display: flex;
     gap: 0.4rem;
 }
+/* celular estreito (S23: 360px): "sex., 20 de nov." cabe no botão sem vazar */
+.date-quick .pill {
+    padding-inline: 0.75rem;
+}
+.date-quick .pill.grow {
+    min-width: 0;
+}
 .pill {
     display: inline-flex;
     align-items: center;

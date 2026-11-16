@@ -164,7 +164,15 @@ const WEEK = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
                 (click)="toggle()"
                 [attr.aria-expanded]="open()"
             >
-                <g-icon name="calendar_month" [size]="18" />{{ value() !== hoje && value() !== ontem ? long() : 'Outra data' }}
+                <g-icon name="calendar_month" [size]="18" />
+                @if (value() !== hoje && value() !== ontem) {
+                    <!-- celular: sem o dia da semana, "30 de dez." cabe ao lado de Hoje/Ontem -->
+                    <span
+                        ><span class="hide-m">{{ weekday() }}, </span>{{ dayMonth() }}</span
+                    >
+                } @else {
+                    Outra data
+                }
             </button>
         </div>
         <!-- celular: calendário nativo do Android/iOS por cima (showPicker); o input fica invisível -->
@@ -217,9 +225,9 @@ export class DatePick {
     addMonths = addMonths;
     month = signal(this.value().slice(0, 8) + '01');
     monthName = computed(() => new Date(this.month() + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }));
-    long = computed(() =>
-        new Date(this.value() + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'short' }),
-    );
+    private at = computed(() => new Date(this.value() + 'T12:00:00'));
+    weekday = computed(() => this.at().toLocaleDateString('pt-BR', { weekday: 'short' }));
+    dayMonth = computed(() => this.at().toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }));
     days = computed(() => {
         const first = new Date(this.month() + 'T12:00:00');
         const n = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();

@@ -1,4 +1,4 @@
-import { Component, computed, effect, inject, signal, untracked } from '@angular/core';
+import { Component, HostListener, computed, effect, inject, signal, untracked } from '@angular/core';
 import { BrlPipe, DmyPipe, Store, Tx, catIcon, must, sb } from '../../core';
 import { ChipOption, ChipSelect } from '../../shared/ui/fields';
 import { Icon } from '../../shared/ui/icon';
@@ -12,7 +12,7 @@ import { Icon } from '../../shared/ui/icon';
                 <h1>Para revisar</h1>
                 <p class="muted" style="margin:.2rem 0 0">
                     Chegaram sozinhos pela notificação do celular ou pelo banco. Toque para editar tudo; troque a categoria ali mesmo;
-                    aprove quando estiver certo.
+                    aprove quando estiver certo. Segure (ou toque no ícone) para selecionar vários.
                 </p>
             </div>
             @if (items().length > 1) {
@@ -30,9 +30,28 @@ import { Icon } from '../../shared/ui/icon';
                 </div>
                 <div class="list">
                     @for (t of g.items; track t.id) {
-                        <div class="item click rev-item" (click)="store.open(t)" (keydown.enter)="store.open(t)" tabindex="0">
-                            <span class="cat-ico" [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
-                                ><span class="ms">{{ icon(t) }}</span></span
+                        <!-- segurar (contextmenu no celular) seleciona, como em Lançamentos -->
+                        <div
+                            class="item click rev-item"
+                            [class.sel]="sel().has(t.id)"
+                            (click)="sel().size ? toggleSel(t) : store.open(t)"
+                            (contextmenu)="$event.preventDefault(); toggleSel(t)"
+                            (keydown.enter)="store.open(t)"
+                            (keydown.space)="$event.preventDefault(); toggleSel(t)"
+                            tabindex="0"
+                        >
+                            <span
+                                class="cat-ico pickable"
+                                [class.picked]="sel().has(t.id)"
+                                [style.--cc]="store.catById().get(t.category_id ?? '')?.color"
+                                role="checkbox"
+                                [attr.aria-checked]="sel().has(t.id)"
+                                aria-label="Selecionar"
+                                tabindex="-1"
+                                (click)="$event.stopPropagation(); toggleSel(t)"
+                                (keydown.space)="$event.preventDefault(); $event.stopPropagation(); toggleSel(t)"
+                                title="Selecionar"
+                                ><span class="ms">{{ sel().has(t.id) ? 'check' : icon(t) }}</span></span
                             >
                             <div class="grow">
                                 <div class="title">{{ t.description }}</div>
@@ -82,6 +101,27 @@ import { Icon } from '../../shared/ui/icon';
                 </div>
             }
         </section>
+
+        @if (sel().size) {
+            <div class="sel-bar" role="toolbar" aria-label="Ações nos selecionados">
+                <button class="btn ghost icon" (click)="sel.set(empty)" aria-label="Limpar seleção (Esc)" title="Limpar seleção (Esc)">
+                    <g-icon name="close" />
+                </button>
+                <div class="grow">
+                    <b>{{ sel().size }} {{ sel().size > 1 ? 'selecionados' : 'selecionado' }}</b>
+                    <span class="num" [class.neg]="selSum() < 0" [class.pos]="selSum() > 0">{{ selSum() | brl }}</span>
+                    @if (sel().size < items().length) {
+                        <button class="link" (click)="selectAll()">todos ({{ items().length }})</button>
+                    }
+                </div>
+                <button class="btn ghost" (click)="approveSel()" title="Aprovar selecionados">
+                    <g-icon name="check" [size]="18" />Aprovar
+                </button>
+                <button class="btn ghost danger" (click)="removeSel()" title="Excluir selecionados">
+                    <g-icon name="delete" [size]="18" />Excluir
+                </button>
+            </div>
+        }
     `,
 })
 export class Review {
@@ -130,11 +170,45 @@ export class Review {
         return this.store.approve(t);
     }
 
-    async approveAll() {
-        const ids = this.items().map((t) => t.id);
-        this.items.set([]);
-        await this.store.withUndo(`${ids.length} lançamentos aprovados`, { column: 'id', value: ids }, () =>
-            must(sb.from('transactions').update({ reviewed: true }).in('id', ids)),
+    approveAll() {
+        return this.approveMany(this.items());
+    }
+
+    /** seleção múltipla (segurar o item), como em Lançamentos */
+    readonly empty: ReadonlySet<string> = new Set();
+    sel = signal<ReadonlySet<string>>(this.empty);
+    selRows = computed(() => this.items().filter((t) => this.sel().has(t.id)));
+    selSum = computed(() => this.selRows().reduce((s, t) => s + t.amount, 0));
+    toggleSel(t: Tx) {
+        const s = new Set(this.sel());
+        if (!s.delete(t.id)) s.add(t.id);
+        this.sel.set(s);
+    }
+    selectAll() {
+        this.sel.set(new Set(this.items().map((t) => t.id)));
+    }
+    @HostListener('document:keydown.escape') esc() {
+        if (this.sel().size && !this.store.form()) this.sel.set(this.empty);
+    }
+    approveSel() {
+        const rows = this.selRows();
+        this.sel.set(this.empty);
+        return this.approveMany(rows);
+    }
+    removeSel() {
+        const rows = this.selRows();
+        this.sel.set(this.empty);
+        this.items.update((l) => l.filter((x) => !rows.includes(x))); // otimista
+        return this.store.removeMany(rows);
+    }
+
+    private async approveMany(rows: Tx[]) {
+        const ids = rows.map((t) => t.id);
+        this.items.update((l) => l.filter((x) => !ids.includes(x.id)));
+        await this.store.withUndo(
+            `${ids.length} ${ids.length > 1 ? 'lançamentos aprovados' : 'lançamento aprovado'}`,
+            { column: 'id', value: ids },
+            () => must(sb.from('transactions').update({ reviewed: true }).in('id', ids)),
         );
     }
 }

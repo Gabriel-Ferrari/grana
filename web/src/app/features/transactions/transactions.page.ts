@@ -588,25 +588,9 @@ export class Transactions {
         );
     }
     async bulkDelete() {
-        let ids = this.selRows().map((t) => t.id);
-        const tids = [
-            ...new Set(
-                this.selRows()
-                    .map((t) => t.transfer_id)
-                    .filter((x): x is string => !!x),
-            ),
-        ];
-        if (tids.length)
-            ids = [
-                ...new Set([
-                    ...ids,
-                    ...(await must(sb.from('transactions').select('id').in('transfer_id', tids))).map((r) => r.id as string),
-                ]),
-            ];
+        const rows = this.selRows();
         this.sel.set(this.empty);
-        await this.store.withUndo(`${ids.length} ${ids.length > 1 ? 'excluídos' : 'excluído'}`, { column: 'id', value: ids }, () =>
-            must(sb.from('transactions').delete().in('id', ids)),
-        );
+        await this.store.removeMany(rows);
     }
 
     /** saldo no fim de cada dia (Organizze): só no modo Caixa ou com uma conta filtrada */

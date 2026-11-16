@@ -1,15 +1,4 @@
-import {
-    Component,
-    DestroyRef,
-    OnInit,
-    afterNextRender,
-    computed,
-    inject,
-    input,
-    output,
-    signal,
-    viewChild,
-} from '@angular/core';
+import { Component, DestroyRef, OnInit, afterNextRender, computed, inject, input, output, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { Store, Tx, addMonths, brl, catIcon, must, notify, offerPush, onBack, sb, today, suggestPrefs } from '../../core';
@@ -202,7 +191,7 @@ export type TxDraft = Partial<Tx> & { kind?: TxKind };
                 <div class="tx-row"><span class="lbl">Data</span><g-date [(value)]="f.date" /></div>
 
                 @if (kind() !== 'transfer') {
-                    @if (!draft().id && !inv()) {
+                    @if (repeatable()) {
                         <div class="tx-row">
                             <span class="lbl">Repetir lançamento</span>
                             <div class="row wrap">
@@ -453,6 +442,11 @@ export class TxForm implements OnInit {
     cards = computed(() => this.store.cards().filter((c) => !c.archived));
     /** pagamento de fatura (aberto em Cartões, como no Organizze): só valor, conta, data e anexos */
     inv = computed(() => !!this.draft().pays_card_id);
+    /** novo, ou avulso já salvo: compra parcelada que chegou da notificação/banco como um valor só vira parcelas aqui */
+    repeatable = computed(() => {
+        const d = this.draft();
+        return !this.inv() && !(d.id && (d.group_id || d.installments || d.recurring || d.transfer_id));
+    });
     title = computed(() =>
         this.inv()
             ? this.draft().id
@@ -777,7 +771,7 @@ export class TxForm implements OnInit {
                     ...(this.f.attachments.length || d.attachments?.length ? { attachments: this.f.attachments } : {}),
                     ...(d.pays_card_id ? { pays_card_id: d.pays_card_id, invoice_date: d.invoice_date } : {}),
                 };
-                if (d.id) {
+                if (d.id && this.f.repeat === 'none') {
                     await must(
                         sb
                             .from('transactions')
@@ -801,8 +795,21 @@ export class TxForm implements OnInit {
                         source: d.source ?? 'manual',
                     }));
                     // ponytail: "fixo" gera 12 meses; estender quando precisar (ou virar tabela de recorrências)
-                    const saved = await must(sb.from('transactions').insert(rows).select('id'));
-                    firstId = saved[0].id;
+                    if (d.id) {
+                        // já salvo: ele vira a 1ª (mantém ext_id do banco); insere os próximos antes, para uma falha não deixar só a 1ª
+                        const [first, ...rest] = rows;
+                        await must(sb.from('transactions').insert(rest));
+                        await must(
+                            sb
+                                .from('transactions')
+                                .update({ ...first, reviewed: true })
+                                .eq('id', d.id),
+                        );
+                        firstId = d.id;
+                    } else {
+                        const saved = await must(sb.from('transactions').insert(rows).select('id'));
+                        firstId = saved[0].id;
+                    }
                 }
             }
             await this.store.load();
